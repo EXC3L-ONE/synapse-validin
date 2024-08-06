@@ -1,0 +1,6 @@
+init {
+    $privsep = $lib.import(ex.validin.privsep)
+
+    $privsep.setTagPrefix($cmdopts.tagname)
+    $lib.print("Changed the Validin tag prefix to #{p}", p=$privsep.getTagPrefix())
+}

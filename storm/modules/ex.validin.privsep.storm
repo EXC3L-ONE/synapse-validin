@@ -1,0 +1,109 @@
+function getMetaSource() {
+    [ meta:source=$lib.guid("validin", "ex", "powerup") :name="validin" ]
+    return($node)
+}
+
+function getValidinAPIKey() {
+    // see if the user has their own key set
+    $apikey = $lib.user.vars.get("validin:apikey")
+    if ($apikey) {
+        return($apikey)
+    }
+
+    // no user key, check for global
+    $apikey = $lib.globals.get("validin:apikey")
+    if ($apikey) {
+        return($apikey)
+    }
+ 
+    return($lib.false)
+}
+
+function setValidinAPIKey(key, self) {
+    if ($self) {
+        $lib.user.vars.set("validin:apikey", `apitoken {$key}`)
+    } else {
+        $lib.globals.set("validin:apikey", `apitoken {$key}`)
+    }
+    return($checkvalidinAPIKey())
+}
+
+function checkValidinAPIKey() {
+    $resp = $makeValidinAPIRequest("ping", "now")
+        
+    if ($resp.status = "OK") {
+        return($lib.true)
+    } else {
+        return($lib.false)
+    }
+}
+
+function getTagPrefix() {
+    return($lib.globals.get("ex.validin:tag-prefix", default=rep.validin))
+}
+
+function setTagPrefix(prefix) {
+    ($ok, $norm) = $lib.trycast(syn:tag:part, $prefix)
+    if (not $ok) {
+        $lib.warn("failed to set tag prefix, invalid value: {s}", s=$prefix)
+        return($lib.null)
+    }
+
+    $lib.globals.set("ex.validin:tag-prefix", $prefix)
+}
+
+function makeValidinAPIRequest(api_endpoint) {
+
+    $url = `https://app.validin.com/api/{$api_endpoint}`
+    $headers = $lib.dict("Authorization"=$getValidinAPIKey())
+
+    $resp = $lib.inet.http.get($url, $headers)
+    if ($resp.code != 200) { return($lib.false) }
+
+    $json = $resp.body.json()
+
+    return($json)
+}
+
+
+function parseDomainPDNS(data) {
+
+    $srcnode = $getMetaSource()
+
+    for $dns_a in $data.records.A {
+        $first_seen = $lib.time.fromunix($dns_a.first_seen)
+        $last_seen = $lib.time.fromunix($dns_a.last_seen)
+        [inet:dns:a=($dns_a.key, $dns_a.value) .seen=($first_seen, $last_seen)]
+    }
+
+    for $dns_ns in $data.records.NS {
+        $first_seen = $lib.time.fromunix($dns_ns.first_seen)
+        $last_seen = $lib.time.fromunix($dns_ns.last_seen)
+        [inet:dns:ns=($dns_ns.key, $dns_ns.value) .seen=($first_seen, $last_seen)]
+    }
+
+    for $dns_aaaa in $data.records.AAAA {
+        $first_seen = $lib.time.fromunix($dns_aaaa.first_seen)
+        $last_seen = $lib.time.fromunix($dns_aaaa.last_seen)
+        [inet:dns:aaaa=($dns_aaaa.key, $dns_aaaa.value) .seen=($first_seen, $last_seen)]
+    }
+
+    [<(seen)+ { yield $srcnode }]
+    | uniq
+
+}
+
+function parseIpPDNS(data) {
+
+    $srcnode = $getMetaSource()
+
+    for $dns_a in $data.records.A {
+        $first_seen = $lib.time.fromunix($dns_a.first_seen)
+        $last_seen = $lib.time.fromunix($dns_a.last_seen)
+        [inet:dns:a=($dns_a.value, $dns_a.key) .seen=($first_seen, $last_seen)]
+    }
+
+    [<(seen)+ { yield $srcnode }]
+    | uniq
+
+}

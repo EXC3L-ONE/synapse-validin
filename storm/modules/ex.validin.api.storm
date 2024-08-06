@@ -1,0 +1,10 @@
+$privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
+
+
+function getIpPDNS(entity) {
+    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/ip/dns/history/", $entity)))
+}
+
+function getDomainPDNS(entity) {
+    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/domain/dns/history/", $entity)))
+}

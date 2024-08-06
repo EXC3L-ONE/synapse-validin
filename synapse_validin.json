@@ -1,0 +1,165 @@
+{
+  "author": {
+    "name": "EXC3L",
+    "url": "https://github.com/EXC3L-ONE"
+  },
+  "commands": [
+    {
+      "cmdargs": [
+        [
+          "apikey",
+          {
+            "help": "The API Key",
+            "type": "str"
+          }
+        ],
+        [
+          "--self",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Set the key as a user variable. If not used, the key is set globally.",
+            "type": "bool"
+          }
+        ],
+        [
+          "--debug",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Show verbose debug output.",
+            "type": "bool"
+          }
+        ]
+      ],
+      "descr": "Set the API key to use with validin (required)",
+      "name": "ex.validin.setup.apikey",
+      "perms": [
+        [
+          "ex",
+          "validin",
+          "user"
+        ]
+      ],
+      "storm": "init {\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n\n    if ($cmdopts.self) {\n        $lib.print(\"Setting Validin API key for the current user.\")\n    } else {\n        $lib.print(\"Setting Validin API key for all users.\")\n    }\n\n    $key_status_ok = $privsep.setValidinAPIKey($cmdopts.apikey, $cmdopts.self)\n\n    if ($key_status_ok) {\n        if ($lib.debug) {$lib.print(\"Validin API key set successfully\")}\n    } else {\n        $lib.warn(\"Failed setting the key for the Validin API. Check if the token you provided is valid.\")\n    }\n\n}"
+    },
+    {
+      "cmdargs": [
+        [
+          "tagname",
+          {
+            "default": "rep.validin",
+            "help": "The tag prefix to use.",
+            "type": "str"
+          }
+        ]
+      ],
+      "descr": "Set the tag prefix used when recording validin tags. Defaults to `rep.validin`.",
+      "name": "ex.validin.setup.tagprefix",
+      "perms": [
+        [
+          "ex",
+          "validin",
+          "user"
+        ]
+      ],
+      "storm": "init {\n    $privsep = $lib.import(ex.validin.privsep)\n\n    $privsep.setTagPrefix($cmdopts.tagname)\n    $lib.print(\"Changed the Validin tag prefix to #{p}\", p=$privsep.getTagPrefix())\n}"
+    },
+    {
+      "cmdargs": [
+        [
+          "--yield",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Yield the newly created nodes rather than the input inet:url nodes.",
+            "type": "bool"
+          }
+        ],
+        [
+          "--debug",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Show verbose debug output.",
+            "type": "bool"
+          }
+        ]
+      ],
+      "descr": "Fetches Passive DNS data for given `inet:ipv4` and `inet:fqdn` nodes.",
+      "forms": {
+        "inputs": [
+          "inet:ipv4",
+          "inet:fqdn"
+        ],
+        "output": [
+          "inet:dns:a",
+          "inet:dns:ns",
+          "inet:dns:aaaa"
+        ]
+      },
+      "name": "ex.validin.pdns",
+      "perms": [
+        [
+          "ex",
+          "validin",
+          "user"
+        ]
+      ],
+      "storm": "init {\n    $api = $lib.import(ex.validin.api, debug=$lib.debug)\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n}\n\n$api_key_set = $privsep.getValidinAPIKey()\n\nif ($api_key_set != $lib.false) {\n\n    switch $node.form() {\n        \"inet:ipv4\": { \n            $data = $api.getIpPDNS($node.repr()) \n            if ($data) {\n                divert $cmdopts.yield $privsep.parseIpPDNS($data)\n            }\n        }\n        \"inet:fqdn\": {\n            $data = $api.getDomainPDNS($node.repr())\n            if ($data) {\n                divert $cmdopts.yield $privsep.parseDomainPDNS($data)\n            }\n        }\n        *: { if $lib.debug { $lib.warn(\"unsupported form received: {f}\", f=$node.form()) } }\n    }\n\n} else {\n    $lib.exit(\"Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first\")\n}"
+    }
+  ],
+  "desc": "The ex-validin package provides an interface to the Validin API allowing for enrichment of `inet:ipv4` and `inet:fqdn` nodes.",
+  "modules": [
+    {
+      "name": "ex.validin.api",
+      "storm": "$privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n\n\nfunction getIpPDNS(entity) {\n    return($privsep.makeValidinAPIRequest($lib.str.concat(\"/axon/ip/dns/history/\", $entity)))\n}\n\nfunction getDomainPDNS(entity) {\n    return($privsep.makeValidinAPIRequest($lib.str.concat(\"/axon/domain/dns/history/\", $entity)))\n}"
+    },
+    {
+      "asroot:perms": [
+        [
+          "ex",
+          "validin",
+          "user"
+        ]
+      ],
+      "name": "ex.validin.privsep",
+      "storm": "function getMetaSource() {\n    [ meta:source=$lib.guid(\"validin\", \"ex\", \"powerup\") :name=\"validin\" ]\n    return($node)\n}\n\nfunction getValidinAPIKey() {\n    // see if the user has their own key set\n    $apikey = $lib.user.vars.get(\"validin:apikey\")\n    if ($apikey) {\n        return($apikey)\n    }\n\n    // no user key, check for global\n    $apikey = $lib.globals.get(\"validin:apikey\")\n    if ($apikey) {\n        return($apikey)\n    }\n \n    return($lib.false)\n}\n\nfunction setValidinAPIKey(key, self) {\n    if ($self) {\n        $lib.user.vars.set(\"validin:apikey\", `apitoken {$key}`)\n    } else {\n        $lib.globals.set(\"validin:apikey\", `apitoken {$key}`)\n    }\n    return($checkvalidinAPIKey())\n}\n\nfunction checkValidinAPIKey() {\n    $resp = $makeValidinAPIRequest(\"ping\", \"now\")\n        \n    if ($resp.status = \"OK\") {\n        return($lib.true)\n    } else {\n        return($lib.false)\n    }\n}\n\nfunction getTagPrefix() {\n    return($lib.globals.get(\"ex.validin:tag-prefix\", default=rep.validin))\n}\n\nfunction setTagPrefix(prefix) {\n    ($ok, $norm) = $lib.trycast(syn:tag:part, $prefix)\n    if (not $ok) {\n        $lib.warn(\"failed to set tag prefix, invalid value: {s}\", s=$prefix)\n        return($lib.null)\n    }\n\n    $lib.globals.set(\"ex.validin:tag-prefix\", $prefix)\n}\n\nfunction makeValidinAPIRequest(api_endpoint) {\n\n    $url = `https://app.validin.com/api/{$api_endpoint}`\n    $headers = $lib.dict(\"Authorization\"=$getValidinAPIKey())\n\n    $resp = $lib.inet.http.get($url, $headers)\n    if ($resp.code != 200) { return($lib.false) }\n\n    $json = $resp.body.json()\n\n    return($json)\n}\n\n\nfunction parseDomainPDNS(data) {\n\n    $srcnode = $getMetaSource()\n\n    for $dns_a in $data.records.A {\n        $first_seen = $lib.time.fromunix($dns_a.first_seen)\n        $last_seen = $lib.time.fromunix($dns_a.last_seen)\n        [inet:dns:a=($dns_a.key, $dns_a.value) .seen=($first_seen, $last_seen)]\n    }\n\n    for $dns_ns in $data.records.NS {\n        $first_seen = $lib.time.fromunix($dns_ns.first_seen)\n        $last_seen = $lib.time.fromunix($dns_ns.last_seen)\n        [inet:dns:ns=($dns_ns.key, $dns_ns.value) .seen=($first_seen, $last_seen)]\n    }\n\n    for $dns_aaaa in $data.records.AAAA {\n        $first_seen = $lib.time.fromunix($dns_aaaa.first_seen)\n        $last_seen = $lib.time.fromunix($dns_aaaa.last_seen)\n        [inet:dns:aaaa=($dns_aaaa.key, $dns_aaaa.value) .seen=($first_seen, $last_seen)]\n    }\n\n    [<(seen)+ { yield $srcnode }]\n    | uniq\n\n}\n\nfunction parseIpPDNS(data) {\n\n    $srcnode = $getMetaSource()\n\n    for $dns_a in $data.records.A {\n        $first_seen = $lib.time.fromunix($dns_a.first_seen)\n        $last_seen = $lib.time.fromunix($dns_a.last_seen)\n        [inet:dns:a=($dns_a.value, $dns_a.key) .seen=($first_seen, $last_seen)]\n    }\n\n    [<(seen)+ { yield $srcnode }]\n    | uniq\n\n}"
+    }
+  ],
+  "name": "ex-validin",
+  "optic": {
+    "actions": [
+      {
+        "descr": "Get passive DNS information from Validin",
+        "forms": [
+          "inet:fqdn",
+          "inet:ipv4"
+        ],
+        "name": "pdns",
+        "storm": "ex.validin.pdns"
+      }
+    ]
+  },
+  "perms": [
+    {
+      "desc": "Allows a user to leverage the ex-validin package",
+      "gate": "cortex",
+      "perm": [
+        "ex",
+        "validin",
+        "user"
+      ]
+    }
+  ],
+  "synapse_minversion": [
+    2,
+    140,
+    0
+  ],
+  "version": [
+    1,
+    0,
+    0
+  ]
+}

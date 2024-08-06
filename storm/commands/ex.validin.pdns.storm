@@ -1,0 +1,28 @@
+init {
+    $api = $lib.import(ex.validin.api, debug=$lib.debug)
+    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
+}
+
+$api_key_set = $privsep.getValidinAPIKey()
+
+if ($api_key_set != $lib.false) {
+
+    switch $node.form() {
+        "inet:ipv4": { 
+            $data = $api.getIpPDNS($node.repr()) 
+            if ($data) {
+                divert $cmdopts.yield $privsep.parseIpPDNS($data)
+            }
+        }
+        "inet:fqdn": {
+            $data = $api.getDomainPDNS($node.repr())
+            if ($data) {
+                divert $cmdopts.yield $privsep.parseDomainPDNS($data)
+            }
+        }
+        *: { if $lib.debug { $lib.warn("unsupported form received: {f}", f=$node.form()) } }
+    }
+
+} else {
+    $lib.exit("Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first")
+}

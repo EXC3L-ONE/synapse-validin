@@ -1,0 +1,83 @@
+name: ex-validin
+version: 1.0.0
+synapse_minversion: [2, 140, 0]
+desc: The ex-validin package provides an interface to the Validin API allowing for enrichment of `inet:ipv4` and `inet:fqdn` nodes.
+
+author:
+  url: https://github.com/EXC3L-ONE
+  name: EXC3L
+
+genopts:
+  dotstorm: true
+
+perms:
+  - perm: [ex, validin, user]
+    desc: Allows a user to leverage the ex-validin package
+    gate: cortex
+
+modules:
+  - name: ex.validin.api
+  - name: ex.validin.privsep
+    asroot:perms:
+      - [ex, validin, user]
+
+commands:
+  - name: ex.validin.setup.apikey
+    descr: Set the API key to use with validin (required)
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - apikey
+        - type: str
+          help: The API Key
+      - - --self
+        - type: bool
+          default: false
+          action: store_true
+          help: Set the key as a user variable. If not used, the key is set globally.
+      - - --debug
+        - type: bool
+          default: false
+          action: store_true
+          help: Show verbose debug output.
+          
+  - name: ex.validin.setup.tagprefix
+    descr: Set the tag prefix used when recording validin tags. Defaults to `rep.validin`.
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - tagname
+        - type: str
+          default: rep.validin
+          help: The tag prefix to use.
+
+  - name: ex.validin.pdns
+    descr: Fetches Passive DNS data for given `inet:ipv4` and `inet:fqdn` nodes.
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - --yield
+        - type: bool
+          default: false
+          action: store_true
+          help: Yield the newly created nodes rather than the input inet:url nodes.
+      - - --debug
+        - type: bool
+          default: false
+          action: store_true
+          help: Show verbose debug output.
+    forms:
+      inputs:
+        - inet:ipv4
+        - inet:fqdn
+      output:
+        - inet:dns:a
+        - inet:dns:ns
+        - inet:dns:aaaa
+
+optic:
+    actions:
+      - name: pdns
+        storm: ex.validin.pdns
+        descr: Get passive DNS information from Validin
+        forms: [ inet:fqdn, inet:ipv4 ]
