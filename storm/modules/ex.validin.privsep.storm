@@ -70,26 +70,29 @@ function parseDomainPDNS(data) {
 
     $srcnode = $getMetaSource()
 
-    for $dns_a in $data.records.A {
-        $first_seen = $lib.time.fromunix($dns_a.first_seen)
-        $last_seen = $lib.time.fromunix($dns_a.last_seen)
-        [inet:dns:a=($dns_a.key, $dns_a.value) .seen=($first_seen, $last_seen)]
+    tee {
+        for $dns_a in $data.records.A {
+            $first_seen = $lib.time.fromunix($dns_a.first_seen)
+            $last_seen = $lib.time.fromunix($dns_a.last_seen)
+            [inet:dns:a=($dns_a.key, $dns_a.value) .seen=($first_seen, $last_seen)]
+        }
     }
-
-    for $dns_ns in $data.records.NS {
-        $first_seen = $lib.time.fromunix($dns_ns.first_seen)
-        $last_seen = $lib.time.fromunix($dns_ns.last_seen)
-        [inet:dns:ns=($dns_ns.key, $dns_ns.value) .seen=($first_seen, $last_seen)]
+    {
+        for $dns_ns in $data.records.NS {
+            $first_seen = $lib.time.fromunix($dns_ns.first_seen)
+            $last_seen = $lib.time.fromunix($dns_ns.last_seen)
+            [inet:dns:ns=($dns_ns.key, $dns_ns.value) .seen=($first_seen, $last_seen)]
+        }
     }
-
-    for $dns_aaaa in $data.records.AAAA {
-        $first_seen = $lib.time.fromunix($dns_aaaa.first_seen)
-        $last_seen = $lib.time.fromunix($dns_aaaa.last_seen)
-        [inet:dns:aaaa=($dns_aaaa.key, $dns_aaaa.value) .seen=($first_seen, $last_seen)]
+    {
+        for $dns_aaaa in $data.records.AAAA {
+            $first_seen = $lib.time.fromunix($dns_aaaa.first_seen)
+            $last_seen = $lib.time.fromunix($dns_aaaa.last_seen)
+            [inet:dns:aaaa=($dns_aaaa.key, $dns_aaaa.value) .seen=($first_seen, $last_seen)]
+        }
     }
-
+    | uniq |
     [<(seen)+ { yield $srcnode }]
-    | uniq
 
 }
 

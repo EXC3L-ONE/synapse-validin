@@ -1,5 +1,5 @@
 name: ex-validin
-version: 1.0.0
+version: 1.0.2
 synapse_minversion: [2, 140, 0]
 desc: The ex-validin package provides an interface to the Validin API allowing for enrichment of `inet:ipv4` and `inet:fqdn` nodes.
 
