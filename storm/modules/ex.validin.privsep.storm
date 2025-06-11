@@ -21,15 +21,15 @@ function getValidinAPIKey() {
 
 function setValidinAPIKey(key, self) {
     if ($self) {
-        $lib.user.vars.set("validin:apikey", `apitoken {$key}`)
+        $lib.user.vars.set("validin:apikey", `Bearer {$key}`)
     } else {
-        $lib.globals.set("validin:apikey", `apitoken {$key}`)
+        $lib.globals.set("validin:apikey", `Bearer {$key}`)
     }
-    return($checkvalidinAPIKey())
+    return($checkValidinAPIKey())
 }
 
 function checkValidinAPIKey() {
-    $resp = $makeValidinAPIRequest("ping", "now")
+    $resp = $makeValidinAPIRequest("ping")
         
     if ($resp.status = "OK") {
         return($lib.true)
@@ -53,12 +53,15 @@ function setTagPrefix(prefix) {
 }
 
 function makeValidinAPIRequest(api_endpoint) {
-
     $url = `https://app.validin.com/api/{$api_endpoint}`
-    $headers = $lib.dict("Authorization"=$getValidinAPIKey())
 
-    $resp = $lib.inet.http.get($url, $headers)
-    if ($resp.code != 200) { return($lib.false) }
+    $headers = ({})
+    $headers."Authorization" = $getValidinAPIKey()
+
+
+    $resp = $lib.inet.http.get($url, headers=$headers)
+    //$resp = $lib.inet.http.get($url, headers=$headers, ssl_verify=$lib.false)
+    if ($resp.code != 200) { return($lib.null) }
 
     $json = $resp.body.json()
 
