@@ -15,9 +15,22 @@ if ($api_key_set != $lib.false) {
             }
         }
         "inet:fqdn": {
-            $data = $api.getDomainPDNS($node.repr())
-            if ($data) {
-                divert $cmdopts.yield $privsep.parseDomainPDNS($data)
+            tee 
+            {
+                $data = $api.getDomainPDNS($node.repr())
+                if ($data) {
+                    divert $cmdopts.yield $privsep.parseDomainPDNS($data)
+                }
+            }
+            // If the user requested extra DNS records, fetch them
+            // and yield them as well.
+            {            
+                if ($cmdopts.'include-extra') {
+                    $extra_dns = $api.getExtraDomainPDNS($node.repr())
+                    if ($extra_dns) {
+                        divert $cmdopts.yield $privsep.parseDomainPDNS($extra_dns)
+                    }
+                }
             }
         }
         *: { if $lib.debug { $lib.warn("unsupported form received: {f}", f=$node.form()) } }

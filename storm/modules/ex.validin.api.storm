@@ -8,3 +8,23 @@ function getIpPDNS(entity) {
 function getDomainPDNS(entity) {
     return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/domain/dns/history/", $entity)))
 }
+
+function getExtraDomainPDNS(entity) {
+    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/domain/dns/extra/", $entity)))
+}
+
+function getDomainSubdomains(entity) {
+    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/domain/subdomains/", $entity)))
+}
+
+function getDomainCrawlHistory(entity) {
+    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/domain/crawl/history/", $entity)))
+}
+
+function getIpCrawlHistory(entity) {
+    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/ip/crawl/history/", $entity)))
+}
+
+function getAdvancedSearchResults(query) {
+    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/search/advanced/query?query_string=", $query)))
+}

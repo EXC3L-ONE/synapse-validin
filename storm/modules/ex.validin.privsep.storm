@@ -19,17 +19,49 @@ function getValidinAPIKey() {
     return($lib.false)
 }
 
+function setValidinExtendedProps() {
+
+    $validin_prop_list = ([])
+
+    $existing_props = $lib.model.ext.getExtModel().props
+    for $prop in $existing_props {
+        if ($prop.0 = 'inet:http:request') {
+            $validin_prop_list.append($prop.1)
+        }
+    }
+
+    if (not $validin_prop_list.has('_validin:body_hash')) {
+        $propinfo = ({'doc': 'The SHA1 hash of the body observed by Validin'})
+        $lib.model.ext.addFormProp(inet:http:request, _validin:body_hash, (hash:sha1, $({})), $propinfo)
+    } if (not $validin_prop_list.has('_validin:favicon_hash')) {
+        $propinfo = ({'doc': 'The MD5 hash of the favicon observed by Validin'})
+        $lib.model.ext.addFormProp(inet:http:request, _validin:favicon_hash, (hash:md5, ({})), $propinfo)
+    } if (not $validin_prop_list.has('_validin:class_0_hash')) {
+        $propinfo = ({'doc': 'The v0.0 version of the MD5 hash of the HTML classes observed by Validin'})
+        $lib.model.ext.addFormProp(inet:http:request, _validin:class_0_hash, (hash:md5, ({})), $propinfo)
+    } if (not $validin_prop_list.has('_validin:class_1_hash')) {
+        $propinfo = ({'doc': 'The v0.1 version of the MD5 hash of the HTML classes observed by Validin'})
+        $lib.model.ext.addFormProp(inet:http:request, _validin:class_1_hash, (hash:md5, ({})), $propinfo)
+    } if (not $validin_prop_list.has('_validin:banner_0_hash')) {
+        $propinfo = ({'doc': 'The v0.0 version of the MD5 hash of the banners observed by Validin'})
+        $lib.model.ext.addFormProp(inet:http:request, _validin:banner_0_hash, (hash:md5, ({})), $propinfo)
+    } if (not $validin_prop_list.has('_validin:title')) {
+        $propinfo = ({'doc': 'The title of the HTML site observed by Validin'})
+        $lib.model.ext.addFormProp(inet:http:request, _validin:title, (str, ({})), $propinfo)
+    }
+}
+
 function setValidinAPIKey(key, self) {
     if ($self) {
-        $lib.user.vars.set("validin:apikey", `apitoken {$key}`)
+        $lib.user.vars.set("validin:apikey", `Bearer {$key}`)
     } else {
-        $lib.globals.set("validin:apikey", `apitoken {$key}`)
+        $lib.globals.set("validin:apikey", `Bearer {$key}`)
     }
-    return($checkvalidinAPIKey())
+    return($checkValidinAPIKey())
 }
 
 function checkValidinAPIKey() {
-    $resp = $makeValidinAPIRequest("ping", "now")
+    $resp = $makeValidinAPIRequest("ping")
         
     if ($resp.status = "OK") {
         return($lib.true)
@@ -52,19 +84,112 @@ function setTagPrefix(prefix) {
     $lib.globals.set("ex.validin:tag-prefix", $prefix)
 }
 
+function setValidinAPIHostname(hostname) {
+    ($ok, $hostname_normalised) = $lib.trycast(inet:fqdn, $hostname)
+    if ($ok) {
+        $lib.globals.set("validin:api-hostname", $hostname)
+        return($lib.true)
+    } else {
+        $lib.warn("Failed to set Validin API hostname, couldn't normalise value to a domain: {s}", s=$hostname)
+        return($lib.false)
+    }
+    
+}
+
 function makeValidinAPIRequest(api_endpoint) {
+    $api_hostname = $lib.globals.get("validin:api-hostname", default="api.validin.com")
+    $url = `https://{$api_hostname}/api/{$api_endpoint}`
 
-    $url = `https://app.validin.com/api/{$api_endpoint}`
-    $headers = $lib.dict("Authorization"=$getValidinAPIKey())
+    $resp = $lib.inet.http.get($url, headers=({"Authorization": $getValidinAPIKey()}))
 
-    $resp = $lib.inet.http.get($url, $headers)
-    if ($resp.code != 200) { return($lib.false) }
+    if ($resp.code != 200) { 
+        $lib.warn("Validin API request failed with code {c}", c=$resp.code)
+        return($lib.null) 
+    }
 
     $json = $resp.body.json()
 
     return($json)
 }
 
+function parseDomains(data) {
+
+    $srcnode = $getMetaSource()
+
+    for $domain in $data.domains {
+        [inet:fqdn=$domain.fqdn]
+    }
+    | uniq |
+    [<(seen)+ { yield $srcnode }]
+
+}
+
+function parseCrawlResponse(data) {
+
+    $srcnode = $getMetaSource()
+
+    for $crawl in $data.crawls {
+        if (not $crawl.value.error) {
+
+            $banners = ([])
+            for $banner in $data.value.banner_full { if ($banner ~=": ") { $banners.append($banner.split(": ")) }}
+
+            if ($data.value.location) { $url = $data.value.location }
+            else { $url = `{$data.value.scheme}://{$data.key}` }
+
+            [(inet:http:request=("validin", $crawl.key, $crawl.first_seen, $crawl.last_seen)
+                :url=$url
+                :time=$lib.time.fromunix($crawl.first_seen)
+                :server=`tcp://{$crawl.value.ip}:{$crawl.value.port}`
+                :response:headers=$banners
+                :response:code?=$lib.regex.search(" (\d{3}) ", $crawl.value.start_line).0
+                :_validin:body_hash?=$crawl.value.body_hash
+                :_validin:favicon_hash?=$crawl.value.favicon_hash
+                :_validin:class_0_hash?=$crawl.value.class_0_hash
+                :_validin:class_1_hash?=$crawl.value.class_1_hash
+                :_validin:banner_0_hash?=$crawl.value.banner_0_hash
+                :flow={[inet:flow=("validin", $crawl.key, $crawl.first_seen, $crawl.last_seen, $crawl.value.port, $crawl.value.scheme)
+                    :dst=`tcp://{$crawl.value.ip}:{$crawl.value.port}`
+                    :dst:handshake=$crawl.value.banner
+                    :dst:txbytes=$crawl.value.length
+                    :time=$lib.time.fromunix($crawl.first_seen)
+                    :dst:ssl:cert={[crypto:x509:cert=$lib.gen.cryptoX509CertBySha256($crawl.value.cert_fingerprint_sha256) 
+                                        :validity:notafter*unset=$crawl.value.cert.not_after
+                                        :validity:notbefore*unset=$crawl.value.cert.not_before
+                                        :issuer=$crawl.value.cert.issuer.replace("/", " ")
+                    ]}
+                ]}
+            )]
+
+            for $anchor in $crawl.value.ext_links.anchors {
+                [+(_validin:anchor)> {[inet:fqdn=$anchor]}]
+            }
+        }
+
+        {
+            [(inet:ssl:jarmsample=(`tcp://{$crawl.value.ip}:{$crawl.value.port}`, $crawl.value.cert_details.jarm) .seen=($crawl.first_seen, $crawl.last_seen) )]    
+        }
+
+    }
+    | uniq |
+    [<(seen)+ { yield $srcnode }]
+
+}
+
+function createSearchQueryNode(node, query) {
+    
+    yield $node
+
+    [<(found)+ {[it:exec:query=("validin", $lib.time.now(), $query)
+                    :text=$query
+                    :time=$lib.time.now()
+                    :language=validin
+                    :synuser=$lib.user.iden
+                    :apiurl=`https://{$lib.globals.get("validin:api-hostname", default="api.validin.com")}/api/axon/advanced/query`
+                ]}
+    ]
+    
+}
 
 function parseDomainPDNS(data) {
 
@@ -72,25 +197,51 @@ function parseDomainPDNS(data) {
 
     tee {
         for $dns_a in $data.records.A {
-            $first_seen = $lib.time.fromunix($dns_a.first_seen)
-            $last_seen = $lib.time.fromunix($dns_a.last_seen)
-            [inet:dns:a=($dns_a.key, $dns_a.value) .seen=($first_seen, $last_seen)]
+            $first = $lib.time.fromunix($dns_a.first_seen)
+            $last  = $lib.time.fromunix($dns_a.last_seen)
+            [ inet:dns:a=(
+                { [ inet:fqdn=$dns_a.key   .seen=($first,$last) ] },
+                { [ inet:ipv4=$dns_a.value .seen=($first,$last) ] }
+            ) .seen=($first,$last) ]
         }
-    }
-    {
+
         for $dns_ns in $data.records.NS {
-            $first_seen = $lib.time.fromunix($dns_ns.first_seen)
-            $last_seen = $lib.time.fromunix($dns_ns.last_seen)
-            [inet:dns:ns=($dns_ns.key, $dns_ns.value) .seen=($first_seen, $last_seen)]
+            $first = $lib.time.fromunix($dns_ns.first_seen)
+            $last  = $lib.time.fromunix($dns_ns.last_seen)
+            [ inet:dns:ns=(
+                { [ inet:fqdn=$dns_ns.key   .seen=($first,$last) ] },
+                { [ inet:fqdn=$dns_ns.value .seen=($first,$last) ] }
+            ) .seen=($first,$last) ]
         }
-    }
-    {
+
         for $dns_aaaa in $data.records.AAAA {
-            $first_seen = $lib.time.fromunix($dns_aaaa.first_seen)
-            $last_seen = $lib.time.fromunix($dns_aaaa.last_seen)
-            [inet:dns:aaaa=($dns_aaaa.key, $dns_aaaa.value) .seen=($first_seen, $last_seen)]
+            $first = $lib.time.fromunix($dns_aaaa.first_seen)
+            $last  = $lib.time.fromunix($dns_aaaa.last_seen)
+            [ inet:dns:aaaa=(
+                { [ inet:fqdn=$dns_aaaa.key   .seen=($first,$last) ] },
+                { [ inet:ipv6=$dns_aaaa.value .seen=($first,$last) ] }
+            ) .seen=($first,$last) ]
+        }
+
+        for $dns_mx in $data.records.MX {
+            $first = $lib.time.fromunix($dns_mx.first_seen)
+            $last  = $lib.time.fromunix($dns_mx.last_seen)
+            [ inet:dns:mx=(
+                { [ inet:fqdn=$dns_mx.key   .seen=($first,$last) ] },
+                { [ inet:fqdn=$dns_mx.value .seen=($first,$last) ] }
+            ) .seen=($first,$last) ]
+        }
+
+        for $dns_txt in $data.records.TXT {
+            $first = $lib.time.fromunix($dns_txt.first_seen)
+            $last  = $lib.time.fromunix($dns_txt.last_seen)
+            [ inet:dns:txt=(
+                { [ inet:fqdn=$dns_txt.key .seen=($first,$last) ] },
+                $dns_txt.value
+            ) .seen=($first,$last) ]
         }
     }
+
     | uniq |
     [<(seen)+ { yield $srcnode }]
 
@@ -101,9 +252,12 @@ function parseIpPDNS(data) {
     $srcnode = $getMetaSource()
 
     for $dns_a in $data.records.A {
-        $first_seen = $lib.time.fromunix($dns_a.first_seen)
-        $last_seen = $lib.time.fromunix($dns_a.last_seen)
-        [inet:dns:a=($dns_a.value, $dns_a.key) .seen=($first_seen, $last_seen)]
+        $first = $lib.time.fromunix($dns_a.first_seen)
+        $last = $lib.time.fromunix($dns_a.last_seen)
+        [ inet:dns:a=(
+            { [ inet:fqdn=$dns_a.value .seen=($first, $last) ] },
+            { [ inet:ipv4=$dns_a.key .seen=($first, $last) ] }
+        ) .seen=($first, $last) ]
     }
 
     [<(seen)+ { yield $srcnode }]

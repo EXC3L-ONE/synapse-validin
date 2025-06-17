@@ -1,0 +1,12 @@
+init {
+    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
+
+    $lib.print("Setting Validin API hostname for all users.")
+
+
+    $hostname_status_ok = $privsep.setValidinAPIHostname($cmdopts.hostname)
+    if ($hostname_status_ok) {
+        if ($lib.debug) {$lib.print("Validin API hostname set successfully")}
+    } 
+
+}
