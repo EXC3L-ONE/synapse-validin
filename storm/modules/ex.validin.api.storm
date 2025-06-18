@@ -2,29 +2,66 @@ $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
 
 
 function getIpPDNS(entity) {
-    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/ip/dns/history/", $entity)))
+    $api_url = $lib.str.concat("/axon/ip/dns/history/", $entity)
+
+    if ($lib.debug) {
+        $lib.print("Calling API URL: {url}", url=$api_url)
+    }
+
+    return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getDomainPDNS(entity) {
-    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/domain/dns/history/", $entity)))
+    $api_url = $lib.str.concat("/axon/domain/dns/history/", $entity)
+
+    if ($lib.debug) {
+        $lib.print("Calling API URL: {url}", url=$api_url)
+    }
+    return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getExtraDomainPDNS(entity) {
-    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/domain/dns/extra/", $entity)))
+    $api_url = $lib.str.concat("/axon/domain/dns/extra/", $entity)
+
+    if ($lib.debug) {
+        $lib.print("Calling API URL: {url}", url=$api_url)
+    }
+    return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getDomainSubdomains(entity) {
-    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/domain/subdomains/", $entity)))
+    $api_url = $lib.str.concat("/axon/domain/subdomains/", $entity)
+
+    if ($lib.debug) {
+        $lib.print("Calling API URL: {url}", url=$api_url)
+    }
+    return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getDomainCrawlHistory(entity) {
-    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/domain/crawl/history/", $entity)))
+    $api_url = $lib.str.concat("/axon/ip/crawl/history/", $entity)
+
+    if ($lib.debug) {
+        $lib.print("Calling API URL: {url}", url=$api_url)
+    }
+    return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getIpCrawlHistory(entity) {
-    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/ip/crawl/history/", $entity)))
+    $api_url = $lib.str.concat("/axon/ip/crawl/history/", $entity)
+
+    if ($lib.debug) {
+        $lib.print("Calling API URL: {url}", url=$api_url)
+    }
+    return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getAdvancedSearchResults(query) {
-    return($privsep.makeValidinAPIRequest($lib.str.concat("/axon/search/advanced/query?query_string=", $query)))
+    $api_url = $lib.str.concat("/axon/ip/dns/history/", $query)
+
+    if ($lib.debug) {
+        $lib.print("Calling API URL: {url}", url=$api_url)
+    }
+    
+    return($privsep.makeValidinAPIRequest($api_url))
 }

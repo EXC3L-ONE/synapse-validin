@@ -128,7 +128,7 @@ function parseCrawlResponse(data) {
 
     $srcnode = $getMetaSource()
 
-    for $crawl in $data.crawls {
+    for $crawl in $data.records {
         if (not $crawl.value.error) {
 
             $banners = ([])
