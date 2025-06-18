@@ -141,25 +141,25 @@ function parseCrawlResponse(data) {
             else { $url = `{$crawl.value.scheme}://{$crawl.value.ip}` }
 
             [(inet:http:request=("validin", $crawl.key, $crawl.first_seen, $crawl.last_seen)
-                :url=$url
-                :time=$lib.time.fromunix($crawl.first_seen)
-                :server=`tcp://{$crawl.value.ip}:{$crawl.value.port}`
-                :response:headers=$banners
-                :response:code?=$lib.regex.search(" (\d{3}) ", $crawl.value.start_line).0
-                :_validin:body_hash?=$crawl.value.body_hash
-                :_validin:favicon_hash?=$crawl.value.favicon_hash
-                :_validin:class_0_hash?=$crawl.value.class_0_hash
-                :_validin:class_1_hash?=$crawl.value.class_1_hash
-                :_validin:banner_0_hash?=$crawl.value.banner_0_hash
+                :url*unset=$url
+                :time*unset=$lib.time.fromunix($crawl.first_seen)
+                :server*unset=`tcp://{$crawl.value.ip}:{$crawl.value.port}`
+                :response:headers*unset=$banners
+                :response:code*unset?=$lib.regex.search(" (\d{3}) ", $crawl.value.start_line).0
+                :_validin:body_hash*unset?=$crawl.value.body_hash
+                :_validin:favicon_hash*unset?=$crawl.value.favicon_hash
+                :_validin:class_0_hash*unset?=$crawl.value.class_0_hash
+                :_validin:class_1_hash*unset?=$crawl.value.class_1_hash
+                :_validin:banner_0_hash*unset?=$crawl.value.banner_0_hash
                 :flow={[inet:flow=("validin", $crawl.key, $crawl.first_seen, $crawl.last_seen, $crawl.value.port, $crawl.value.scheme)
-                    :dst=`tcp://{$crawl.value.ip}:{$crawl.value.port}`
-                    :dst:handshake=$crawl.value.banner
-                    :dst:txbytes=$crawl.value.length
-                    :time=$lib.time.fromunix($crawl.first_seen)
+                    :dst*unset=`tcp://{$crawl.value.ip}:{$crawl.value.port}`
+                    :dst:handshake*unset=$crawl.value.banner
+                    :dst:txbytes*unset=$crawl.value.length
+                    :time*unset=$lib.time.fromunix($crawl.first_seen)
                     :dst:ssl:cert?={[crypto:x509:cert=$lib.gen.cryptoX509CertBySha256($crawl.value.cert_fingerprint_sha256) 
                                         :validity:notafter*unset=$crawl.value.cert.not_after
                                         :validity:notbefore*unset=$crawl.value.cert.not_before
-                                        :issuer=$crawl.value.cert.issuer.replace("/", " ")
+                                        :issuer*unset=$crawl.value.cert.issuer.replace("/", " ")
                     ]}
                 ]}
             )]
