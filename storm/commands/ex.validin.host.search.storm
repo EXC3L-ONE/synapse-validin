@@ -9,8 +9,7 @@ if ($api_key_set != $lib.false) {
 
     $search_results = $api.getAdvancedSearchResults($cmdopts.query)
     if ($search_results) {
-        yield $privsep.parseCrawlResponse($search_results)
-        $privsep.createSearchQueryNode($node, $cmdopts.query)
+        yield $privsep.parseCrawlResponse($search_results, create_query=$lib.true, query=$cmdopts.query)
     }
 
 

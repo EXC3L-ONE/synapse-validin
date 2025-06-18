@@ -124,9 +124,11 @@ function parseDomains(data) {
 
 }
 
-function parseCrawlResponse(data) {
+function parseCrawlResponse(data, create_query=$lib.false, query="") {
 
     $srcnode = $getMetaSource()
+    $query_time = $lib.time.now()
+    $query_created = $lib.false
 
     for $crawl in $data.records.crawlr {
         if (not $crawl.value.error) {
@@ -177,21 +179,25 @@ function parseCrawlResponse(data) {
     | uniq |
     [<(seen)+ { yield $srcnode }]
 
+    if ($create_query) { 
+        if (not $query_created) {
+            $query_node = $createQueryNode($query)
+            $query_created = $lib.true
+        }
+
+        [ <(found)+ { yield $query_node } ]
+    }
 }
 
-function createSearchQueryNode(inboundNode, query) {
-    
-    yield $inboundNode
-
-    [<(found)+ {[it:exec:query=("validin", $lib.time.now(), $query)
-                    :text=$query
-                    :time=$lib.time.now()
-                    :language=validin
-                    :synuser=$lib.user.iden
-                    :apiurl=`https://{$lib.globals.get("validin:api-hostname", default="api.validin.com")}/api/axon/advanced/query`
-                ]}
+function createQueryNode(query) {
+    [it:exec:query=("validin", $lib.time.now(), $query)
+                            :text=$query
+                            :time=$lib.time.now()
+                            :language=validin
+                            :synuser=$lib.user.iden
+                            :apiurl=`https://{$lib.globals.get("validin:api-hostname", default="api.validin.com")}/api/axon/advanced/query`
     ]
-    
+    return($node)
 }
 
 function parseDomainPDNS(data) {
