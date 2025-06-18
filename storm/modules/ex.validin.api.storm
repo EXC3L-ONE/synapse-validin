@@ -57,7 +57,7 @@ function getIpCrawlHistory(entity) {
 }
 
 function getAdvancedSearchResults(query) {
-    $api_url = $lib.str.concat("/axon/ip/dns/history/", $query)
+    $api_url = $lib.str.concat("/axon/advanced/query?query_string=", $lib.inet.http.urlencode($query))
 
     if ($lib.debug) {
         $lib.print("Calling API URL: {url}", url=$api_url)

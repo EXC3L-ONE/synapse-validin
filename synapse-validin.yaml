@@ -21,6 +21,8 @@ modules:
     asroot:perms:
       - [ex, validin, user]
 
+onload: $lib.import(ex.validin.privsep).setValidinExtendedProps()
+
 commands:
   - name: ex.validin.setup.apikey
     descr: Set the API key to use with validin (required)

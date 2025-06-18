@@ -128,14 +128,17 @@ function parseCrawlResponse(data) {
 
     $srcnode = $getMetaSource()
 
-    for $crawl in $data.records {
+    for $crawl in $data.records.crawlr {
         if (not $crawl.value.error) {
 
             $banners = ([])
-            for $banner in $data.value.banner_full { if ($banner ~=": ") { $banners.append($banner.split(": ")) }}
+            for $banner in $crawl.value.banner_full { if ($banner ~=": ") { $banners.append($banner.split(": ")) }}
 
-            if ($data.value.location) { $url = $data.value.location }
-            else { $url = `{$data.value.scheme}://{$data.key}` }
+            if ($crawl.value.location) { $url = $crawl.value.location }
+            elif ($crawl.value.host and $crawl.value.port and $crawl.value.port != 80 and $crawl.value.port != 443) { $url = `{$crawl.value.scheme}://{$crawl.value.host}:{$crawl.value.port}` } 
+            elif ($crawl.value.host) { $url = `{$crawl.value.scheme}://{$crawl.value.host}` }
+            elif ($crawl.value.ip and $crawl.value.port and $crawl.value.port != 80 and $crawl.value.port != 443 ) { $url = `{$crawl.value.scheme}://{$crawl.value.ip}:{$crawl.value.port}` }
+            else { $url = `{$crawl.value.scheme}://{$crawl.value.ip}` }
 
             [(inet:http:request=("validin", $crawl.key, $crawl.first_seen, $crawl.last_seen)
                 :url=$url
@@ -153,7 +156,7 @@ function parseCrawlResponse(data) {
                     :dst:handshake=$crawl.value.banner
                     :dst:txbytes=$crawl.value.length
                     :time=$lib.time.fromunix($crawl.first_seen)
-                    :dst:ssl:cert={[crypto:x509:cert=$lib.gen.cryptoX509CertBySha256($crawl.value.cert_fingerprint_sha256) 
+                    :dst:ssl:cert?={[crypto:x509:cert=$lib.gen.cryptoX509CertBySha256($crawl.value.cert_fingerprint_sha256) 
                                         :validity:notafter*unset=$crawl.value.cert.not_after
                                         :validity:notbefore*unset=$crawl.value.cert.not_before
                                         :issuer=$crawl.value.cert.issuer.replace("/", " ")
@@ -166,8 +169,8 @@ function parseCrawlResponse(data) {
             }
         }
 
-        {
-            [(inet:ssl:jarmsample=(`tcp://{$crawl.value.ip}:{$crawl.value.port}`, $crawl.value.cert_details.jarm) .seen=($crawl.first_seen, $crawl.last_seen) )]    
+        if ($crawl.value.cert_details.jarm) {
+            { [(inet:ssl:jarmsample=(`tcp://{$crawl.value.ip}:{$crawl.value.port}`, $crawl.value.cert_details.jarm) .seen=($crawl.first_seen, $crawl.last_seen) )] }
         }
 
     }
@@ -176,9 +179,9 @@ function parseCrawlResponse(data) {
 
 }
 
-function createSearchQueryNode(node, query) {
+function createSearchQueryNode(inboundNode, query) {
     
-    yield $node
+    yield $inboundNode
 
     [<(found)+ {[it:exec:query=("validin", $lib.time.now(), $query)
                     :text=$query
