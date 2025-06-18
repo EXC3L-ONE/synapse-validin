@@ -22,6 +22,8 @@ modules:
       - [ex, validin, user]
 
 commands:
+
+
   - name: ex.validin.setup.apikey
     descr: Set the API key to use with validin (required)
     perms:
@@ -50,6 +52,48 @@ commands:
         - type: str
           default: rep.validin
           help: The tag prefix to use.
+
+  - name: ex.validin.setup.hostname
+    descr: Set the hostname for Validin API requests (enterprise or community)
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - --enterprise
+        - type: bool
+          default: false
+          action: store_true
+          help: Use enterprise hostname (pilot.validin.com). If not used, community hostname (app.validin.com) will be used.
+      - - --self
+        - type: bool
+          default: false
+          action: store_true
+          help: Set the hostname as a user variable. If not used, the hostname is set globally.
+      - - --debug
+        - type: bool
+          default: false
+          action: store_true
+          help: Show verbose debug output.
+
+  - name: ex.validin.whois
+    descr: Fetches WHOIS registration history for given `inet:fqdn` nodes.
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - --yield
+        - type: bool
+          default: false
+          action: store_true
+          help: Yield the newly created nodes rather than the input inet:fqdn nodes.
+      - - --debug
+        - type: bool
+          default: false
+          action: store_true
+          help: Show verbose debug output.
+    forms:
+      inputs:
+        - inet:fqdn
+      output:
+        - inet:whois:rec
 
   - name: ex.validin.pdns
     descr: Fetches Passive DNS data for given `inet:ipv4` and `inet:fqdn` nodes.
@@ -81,3 +125,8 @@ optic:
         storm: ex.validin.pdns
         descr: Get passive DNS information from Validin
         forms: [ inet:fqdn, inet:ipv4 ]
+    actions:
+      - name: whois
+        storm: ex.validin.whois
+        descr: Get domain registration information from Validin
+        forms: [ inet:fqdn ]

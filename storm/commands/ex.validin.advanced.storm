@@ -1,0 +1,39 @@
+init {
+    $api = $lib.import(ex.validin.api, debug=$lib.debug)
+    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
+}
+
+$api_key_set = $privsep.getValidinAPIKey()
+
+if ($api_key_set != $lib.false) {
+    $fields = $cmdopts.fields
+    if $fields {
+        // Convert comma-separated string to proper format
+        $fields = $lib.str.replace($fields, " ", "")
+    }
+
+    // Make the advanced query
+    $data = $api.advancedQuery($cmdopts.query, include_fields=$fields)
+    
+    if ($data) {
+        if $lib.debug {
+            $lib.print('Advanced query returned results')
+        }
+
+        // Parse and emit nodes based on the results
+        for $result in $data.results {
+            // Create nodes based on the type of result
+            switch $result.type {
+                "domain": { [inet:fqdn=$result.value] }
+                "ip": { [inet:ipv4=$result.value] }
+                *: { 
+                    if $lib.debug {
+                        $lib.warn('Unknown result type: {t}', t=$result.type)
+                    }
+                }
+            }
+        }
+    }
+} else {
+    $lib.exit("Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first")
+}

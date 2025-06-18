@@ -1,0 +1,23 @@
+init {
+    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
+
+    if ($cmdopts.enterprise) {
+        $hostname = "pilot.validin.com"
+        if ($cmdopts.debug) {
+            $lib.print("Using enterprise hostname: {h}", h=$hostname)
+        }
+    } else {
+        $hostname = "app.validin.com"
+        if ($cmdopts.debug) {
+            $lib.print("Using community hostname: {h}", h=$hostname)
+        }
+    }
+
+    if ($cmdopts.self) {
+        $lib.print("Setting Validin hostname for the current user")
+    } else {
+        $lib.print("Setting Validin hostname for all users")
+    }
+
+    $privsep.setValidinHostname($hostname, $cmdopts.self)
+}

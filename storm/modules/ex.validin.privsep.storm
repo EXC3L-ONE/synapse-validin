@@ -52,20 +52,24 @@ function setTagPrefix(prefix) {
     $lib.globals.set("ex.validin:tag-prefix", $prefix)
 }
 
-function makeValidinAPIRequest(api_endpoint) {
-    $url = `https://app.validin.com/api/{$api_endpoint}`
+function makeValidinAPIRequest(api_endpoint, method="GET") {
+    $hostname = $getValidinHostname()
+    $url = `https://{$hostname}/api/{$api_endpoint}`
 
     $headers = ({})
     $headers."Authorization" = $getValidinAPIKey()
 
+    if ($method = "POST") {
+        $resp = $lib.inet.http.post($url, headers=$headers)
+    } else {
+        $resp = $lib.inet.http.get($url, headers=$headers)
+        //uncomment below for running testing
+        //$resp = $lib.inet.http.get($url, headers=$headers, ssl_verify=$lib.false)
+    }
 
-    $resp = $lib.inet.http.get($url, headers=$headers)
-    //$resp = $lib.inet.http.get($url, headers=$headers, ssl_verify=$lib.false)
     if ($resp.code != 200) { return($lib.null) }
 
-    $json = $resp.body.json()
-
-    return($json)
+    return($resp.body.json())
 }
 
 
@@ -109,6 +113,64 @@ function parseIpPDNS(data) {
         [inet:dns:a=($dns_a.value, $dns_a.key) .seen=($first_seen, $last_seen)]
     }
 
+    [<(seen)+ { yield $srcnode }]
+    | uniq
+
+}
+
+function getValidinHostname() {
+    // see if the user has their own hostname set
+    $hostname = $lib.user.vars.get("validin:hostname")
+    if ($hostname) {
+        return($hostname)
+    }
+
+    // no user hostname, check for global
+    $hostname = $lib.globals.get("validin:hostname")
+    if ($hostname) {
+        return($hostname)
+    }
+ 
+    // Default to community hostname
+    return("app.validin.com")
+}
+
+function setValidinHostname(hostname, self) {
+    if ($self) {
+        $lib.user.vars.set("validin:hostname", $hostname)
+    } else {
+        $lib.globals.set("validin:hostname", $hostname)
+    }
+}
+
+function emitDomainRegHistory(data) {
+    $srcnode = $getMetaSource()
+
+    for $reg in $data.records.registration {
+        $asof = $lib.time.parse($reg.date, "%Y-%m-%d")
+        $created = $lib.time.parse($reg.registered.0, "%Y-%m-%dT%H:%M:%SZ")
+        $expires = $lib.time.parse($reg.expires.0, "%Y-%m-%dT%H:%M:%SZ")
+        $domain = $reg.domain
+        $registrar = $reg.registrar.0
+
+        // create init whois node
+        [ inet:whois:rec=($domain, $asof)
+            :created=$created
+            :expires=$expires
+            :registrar=$registrar
+        ]
+
+        // conditional on if updated field exists
+        if $reg.updated {
+            $updated = $lib.time.parse($reg.updated.0, "%Y-%m-%dT%H:%M:%SZ")
+            [ :updated = $updated ] 
+        }
+
+        // Add nameserver relationships
+        for $ns in $reg.nameservers {
+            [ inet:whois:recns=($ns, $node) ]
+        }
+    }
     [<(seen)+ { yield $srcnode }]
     | uniq
 
