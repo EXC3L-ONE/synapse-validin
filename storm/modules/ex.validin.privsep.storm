@@ -195,7 +195,7 @@ function createQueryNode(query) {
                             :time=$lib.time.now()
                             :language=validin
                             :synuser=$lib.user.iden
-                            :apiurl=`https://{$lib.globals.get("validin:api-hostname", default="api.validin.com")}/api/axon/advanced/query`
+                            :api:url=`https://{$lib.globals.get("validin:api-hostname", default="api.validin.com")}/api/axon/advanced/query`
     ]
     return($node)
 }
