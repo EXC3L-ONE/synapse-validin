@@ -63,7 +63,7 @@ function makeValidinAPIRequest(api_endpoint, method="GET") {
         $resp = $lib.inet.http.post($url, headers=$headers)
     } else {
         $resp = $lib.inet.http.get($url, headers=$headers)
-        //uncomment below for running testing
+        //uncomment below for and comment out above for running pytest
         //$resp = $lib.inet.http.get($url, headers=$headers, ssl_verify=$lib.false)
     }
 
