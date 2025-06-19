@@ -1,2 +1,3 @@
 synapse
 pytest
+python-dotenv

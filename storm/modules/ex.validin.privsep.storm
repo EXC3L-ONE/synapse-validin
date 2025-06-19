@@ -100,7 +100,7 @@ function makeValidinAPIRequest(api_endpoint) {
     $api_hostname = $lib.globals.get("validin:api-hostname", default="api.validin.com")
     $url = `https://{$api_hostname}/api/{$api_endpoint}`
 
-    $resp = $lib.inet.http.get($url, headers=({"Authorization": $getValidinAPIKey()}))
+    $resp = $lib.inet.http.get($url, headers=({"Authorization": $getValidinAPIKey()}), ssl_verify=$lib.false)
 
     if ($resp.code != 200) { 
         $lib.warn("Validin API request failed with code {c}", c=$resp.code)
@@ -272,4 +272,32 @@ function parseIpPDNS(data) {
     [<(seen)+ { yield $srcnode }]
     | uniq
 
+}
+
+function emitDomainRegHistory(data) {
+    $srcnode = $getMetaSource()
+    for $reg in $data.records.registration {
+        $asof = $lib.time.parse($reg.date, "%Y-%m-%d")
+        $created = $lib.time.parse($reg.registered.0, "%Y-%m-%dT%H:%M:%SZ")
+        $expires = $lib.time.parse($reg.expires.0, "%Y-%m-%dT%H:%M:%SZ")
+        $domain = $reg.domain
+        $registrar = $reg.registrar.0
+        // create init whois node
+        [ inet:whois:rec=($domain, $asof)
+            :created=$created
+            :expires=$expires
+            :registrar=$registrar
+        ]
+        // conditional on if updated field exists
+        if $reg.updated {
+            $updated = $lib.time.parse($reg.updated.0, "%Y-%m-%dT%H:%M:%SZ")
+            [ :updated = $updated ] 
+        }
+        // Add nameserver relationships
+        for $ns in $reg.nameservers {
+            [ inet:whois:recns=($ns, $node) ]
+        }
+    }
+    [<(seen)+ { yield $srcnode }]
+    | uniq
 }

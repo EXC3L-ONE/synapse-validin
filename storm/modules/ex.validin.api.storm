@@ -65,3 +65,13 @@ function getAdvancedSearchResults(query) {
     
     return($privsep.makeValidinAPIRequest($api_url))
 }
+
+function getDomainRegHistory(entity) {
+    $api_url = $lib.str.concat("/axon/domain/registration/history/", $entity)
+
+    if ($lib.debug) {
+        $lib.print("Calling API URL: {url}", url=$api_url)
+    }
+
+    return($privsep.makeValidinAPIRequest($api_url))
+}

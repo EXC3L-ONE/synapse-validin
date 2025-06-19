@@ -140,6 +140,27 @@ commands:
           default: false
           action: store_true
           help: Show verbose debug output.
+          
+  - name: ex.validin.whois
+    descr: Fetches WHOIS registration history for given `inet:fqdn` nodes.
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - --yield
+        - type: bool
+          default: false
+          action: store_true
+          help: Yield the newly created nodes rather than the input inet:fqdn nodes.
+      - - --debug
+        - type: bool
+          default: false
+          action: store_true
+          help: Show verbose debug output.
+    forms:
+      inputs:
+        - inet:fqdn
+      output:
+        - inet:whois:rec
 
 optic:
     actions:
@@ -158,4 +179,8 @@ optic:
       - name: host subdomains
         storm: ex.validin.host.subdomains
         descr: Get subdomains from Validin
+        forms: [ inet:fqdn ]
+      - name: whois
+        storm: ex.validin.whois
+        descr: Get domain registration information from Validin
         forms: [ inet:fqdn ]

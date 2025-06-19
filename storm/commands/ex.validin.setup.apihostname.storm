@@ -6,7 +6,7 @@ init {
 
     $hostname_status_ok = $privsep.setValidinAPIHostname($cmdopts.hostname)
     if ($hostname_status_ok) {
-        if ($lib.debug) {$lib.print("Validin API hostname set successfully")}
+        if ($lib.debug) {$lib.print(`Validin API hostname set successfully: {$cmdopts.hostname}`)}
     } 
 
 }
