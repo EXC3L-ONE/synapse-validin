@@ -159,8 +159,90 @@ commands:
     forms:
       inputs:
         - inet:fqdn
-      output:
-        - inet:whois:rec
+
+  - name: ex.validin.project.list
+    descr: Retrieves Validin projects and creates proj:project nodes
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - --yield
+        - type: bool
+          default: false
+          action: store_true
+          help: Yield the newly created nodes rather than the input nodes.
+      - - --debug
+        - type: bool
+          default: false
+          action: store_true
+          help: Show verbose debug output.
+
+  - name: ex.validin.project.indicators.get
+    descr: Retrieves indicators for a Validin project and creates appropriate nodes
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - --yield
+        - type: bool
+          default: false
+          action: store_true
+          help: Yield the newly created nodes rather than the input proj:project nodes.
+      - - --all
+        - type: bool
+          default: false
+          action: store_true
+          help: Sync all validin proj:project nodes instead of requiring input nodes.
+      - - --debug
+        - type: bool
+          default: false
+          action: store_true
+          help: Show verbose debug output.
+    forms:
+      inputs:
+        - proj:project
+
+  - name: ex.validin.project.indicators.add
+    descr: Adds indicators to a Validin project
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - project_guid
+        - type: str
+          help: The project GUID to add indicators to
+      - - --debug
+        - type: bool
+          default: false
+          action: store_true
+          help: Show verbose debug output.
+    forms:
+      inputs:
+        - inet:fqdn
+        - inet:ipv4
+        - inet:ipv6
+        - hash:md5
+        - hash:sha1
+        - hash:sha256
+
+  - name: ex.validin.project.indicators.delete
+    descr: Deletes indicators from a Validin project
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - project_guid
+        - type: str
+          help: The project GUID to delete indicators from
+      - - --debug
+        - type: bool
+          default: false
+          action: store_true
+          help: Show verbose debug output.
+    forms:
+      inputs:
+        - inet:fqdn
+        - inet:ipv4
+        - inet:ipv6
+        - hash:md5
+        - hash:sha1
+        - hash:sha256
 
 optic:
     actions:

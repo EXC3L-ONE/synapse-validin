@@ -1,0 +1,51 @@
+init {
+    $api = $lib.import(ex.validin.api, debug=$lib.debug)
+    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
+}
+
+$api_key_set = $privsep.getValidinAPIKey()
+
+if ($api_key_set != $lib.false) {
+
+    // Initialize payload structure
+    $payload = ({
+        "types": ({
+            "dom": ([]),
+            "ip": ([]),
+            "hash": ([]),
+            "raw": ([])
+        })
+    })
+    
+    $indicator_value = $node.repr()
+    
+    switch $node.form() {
+        "inet:fqdn": {
+            $payload.types.dom.append($indicator_value)
+        }
+        ("inet:ipv4", "inet:ipv6"): {
+            $payload.types.ip.append($indicator_value)
+        }
+        ("hash:md5", "hash:sha1", "hash:sha256"): {
+            $payload.types.hash.append($indicator_value)
+        }
+        *: { 
+            $lib.warn("Unsupported form for indicator addition: {f}", f=$node.form()) 
+            return()
+        }
+    }
+    
+    if ($lib.debug) {
+        $lib.print(`Adding {$node.form()}={$indicator_value} to project {$cmdopts.project_guid}`)
+    }
+    
+    $result = $api.addProjectIndicators($cmdopts.project_guid, $payload)
+    if ($result) {
+        $lib.print(`Successfully added {$node.form()}={$indicator_value} to project`)
+    } else {
+        $lib.warn(`Failed to add indicator to project`)
+    }
+
+} else {
+    $lib.exit("Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first")
+} 

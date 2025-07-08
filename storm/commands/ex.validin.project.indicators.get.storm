@@ -1,0 +1,25 @@
+init {
+    $api = $lib.import(ex.validin.api, debug=$lib.debug)
+    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
+}
+
+$api_key_set = $privsep.getValidinAPIKey()
+
+if ($api_key_set != $lib.false) {
+    $project_guid = $node.repr()
+    $validin_guid = $node.props.get("_validin:guid")
+    
+    if ($lib.debug) {
+        $lib.print(`Getting indicators for project: {$validin_guid}`)
+    }
+    
+    $indicator_data = $api.getProjectIndicators($validin_guid)
+    if ($indicator_data) {
+        divert $cmdopts.yield $privsep.parseProjectIndicators($indicator_data, $project_guid)
+    } else {
+        $lib.warn(`Failed to retrieve indicators for project: {$validin_guid}`)
+    }
+
+} else {
+    $lib.exit("Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first")
+} 

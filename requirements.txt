@@ -1,3 +1,4 @@
 synapse
 pytest
 python-dotenv
+pytest-xdist

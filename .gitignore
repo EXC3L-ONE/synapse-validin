@@ -1,5 +1,10 @@
 /.DS_Store
 .env
 __pycache__/
+*.py[cod]
+*$py.class
 .pytest_cache/
 venv/
+.vscode/
+docs/
+test/__pycache__/

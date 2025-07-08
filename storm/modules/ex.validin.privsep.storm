@@ -49,6 +49,19 @@ function setValidinExtendedProps() {
         $propinfo = ({'doc': 'The title of the HTML site observed by Validin'})
         $lib.model.ext.addFormProp(inet:http:request, _validin:title, (str, ({})), $propinfo)
     }
+
+    // Add extended property for proj:project
+    $validin_proj_prop_list = ([])
+    for $prop in $existing_props {
+        if ($prop.0 = 'proj:project') {
+            $validin_proj_prop_list.append($prop.1)
+        }
+    }
+
+    if (not $validin_proj_prop_list.has('_validin:guid')) {
+        $propinfo = ({'doc': 'The Validin project GUID'})
+        $lib.model.ext.addFormProp(proj:project, _validin:guid, (str, ({})), $propinfo)
+    }
 }
 
 function setValidinAPIKey(key, self) {
@@ -77,7 +90,7 @@ function getTagPrefix() {
 function setTagPrefix(prefix) {
     ($ok, $norm) = $lib.trycast(syn:tag:part, $prefix)
     if (not $ok) {
-        $lib.warn("failed to set tag prefix, invalid value: {s}", s=$prefix)
+        $lib.warn(`failed to set tag prefix, invalid value: {$prefix}`)
         return($lib.null)
     }
 
@@ -90,20 +103,32 @@ function setValidinAPIHostname(hostname) {
         $lib.globals.set("validin:api-hostname", $hostname)
         return($lib.true)
     } else {
-        $lib.warn("Failed to set Validin API hostname, couldn't normalise value to a domain: {s}", s=$hostname)
+        $lib.warn(`Failed to set Validin API hostname, couldn't normalise value to a domain: {$hostname}`)
         return($lib.false)
     }
     
 }
 
-function makeValidinAPIRequest(api_endpoint) {
+function makeValidinAPIRequest(api_endpoint, method="GET", post_data=$lib.null) {
     $api_hostname = $lib.globals.get("validin:api-hostname", default="api.validin.com")
     $url = `https://{$api_hostname}/api/{$api_endpoint}`
 
-    $resp = $lib.inet.http.get($url, headers=({"Authorization": $getValidinAPIKey()}), ssl_verify=$lib.false)
+    if $lib.debug {
+        $lib.print(`Calling API URL: {$url} with method {$method}`)
+        if ($post_data) {
+            $lib.print(`POST data: {$post_data}`)
+        }
+    }
+
+    // Handle GET vs POST requests
+    if ($method = "POST") {
+        $resp = $lib.inet.http.post($url, headers=({"Authorization": $getValidinAPIKey(), "Content-Type": "application/json"}), json=$post_data, ssl_verify=$lib.false)
+    } else {
+        $resp = $lib.inet.http.get($url, headers=({"Authorization": $getValidinAPIKey()}), ssl_verify=$lib.false)
+    }
 
     if ($resp.code != 200) { 
-        $lib.warn("Validin API request failed with code {c}", c=$resp.code)
+        $lib.warn(`Validin API {$method} request failed with code {$resp.code}`)
         return($lib.null) 
     }
 
@@ -300,4 +325,75 @@ function emitDomainRegHistory(data) {
     }
     [<(seen)+ { yield $srcnode }]
     | uniq
+}
+
+function parseProjectList(data) {
+    $srcnode = $getMetaSource()
+
+    for ($project_id, $project_info) in $data.projects {
+        [proj:project=$project_id
+            :_validin:guid=$project_id
+            :name=$project_info.details.name
+            :type=validin
+            :created=$lib.time.fromunix($project_info.details.create_time)
+            :desc?=$project_info.details.description
+        ]
+    }
+
+    | uniq |
+    [<(seen)+ { yield $srcnode }]
+}
+
+function parseProjectIndicators(data, project_guid) {
+    $srcnode = $getMetaSource()
+    
+    // First ensure the project exists
+    [ proj:project=$project_guid ]
+    
+    for $indicator in $data.indicators {
+        $indicator_key = $indicator.key
+        $key_type = $indicator.key_type
+        $added_time = $lib.time.fromunix($indicator.time)
+        
+        // Try different forms based on key_type and validation
+        if ($key_type = "dom") {
+            ($ok, $norm) = $lib.trycast(inet:fqdn, $indicator_key)
+            if ($ok) {
+                [ inet:fqdn=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]
+            }
+        } elif ($key_type = "ip4") {
+            ($ok, $norm) = $lib.trycast(inet:ipv4, $indicator_key)
+            if ($ok) {
+                [ inet:ipv4=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]
+            }
+        } elif ($key_type = "ip6") {
+            ($ok, $norm) = $lib.trycast(inet:ipv6, $indicator_key)
+            if ($ok) {
+                [ inet:ipv6=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]
+            }
+        } elif ($key_type = "hash") {
+            // Try different hash types
+            ($ok, $norm) = $lib.trycast(hash:md5, $indicator_key)
+            if ($ok) {
+                [ hash:md5=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]
+            } else {
+                ($ok, $norm) = $lib.trycast(hash:sha1, $indicator_key)
+                if ($ok) {
+                    [ hash:sha1=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]
+                } else {
+                    ($ok, $norm) = $lib.trycast(hash:sha256, $indicator_key)
+                    if ($ok) {
+                        [ hash:sha256=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]
+                    }
+                }
+            }
+        } else {
+            if ($lib.debug) {
+                $lib.warn(`Failed to create node for indicator: {$indicator_key} (type: {$key_type})`)
+            }
+        }
+    }
+    
+    | uniq |
+    [<(seen)+ { yield $srcnode }]
 }

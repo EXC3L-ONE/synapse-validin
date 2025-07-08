@@ -1,77 +1,61 @@
 $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
 
+function getProjectList() {
+    $api_url = "project/list"
+    return($privsep.makeValidinAPIRequest($api_url))
+}
+
+function getProjectIndicators(project_id) {
+    $api_url = $lib.str.concat("project/", $project_id, "/indicators")
+    return($privsep.makeValidinAPIRequest($api_url))
+}
+
+function addProjectIndicators(project_id, indicator_data) {
+    $api_url = $lib.str.concat("project/", $project_id, "/indicators/add")
+    return($privsep.makeValidinAPIRequest($api_url, method="POST", post_data=$indicator_data))
+}
+
+function deleteProjectIndicators(project_id, indicator_data) {
+    $api_url = $lib.str.concat("project/", $project_id, "/indicators/delete")
+    return($privsep.makeValidinAPIRequest($api_url, method="POST", post_data=$indicator_data))
+}
 
 function getIpPDNS(entity) {
-    $api_url = $lib.str.concat("/axon/ip/dns/history/", $entity)
-
-    if ($lib.debug) {
-        $lib.print("Calling API URL: {url}", url=$api_url)
-    }
-
+    $api_url = $lib.str.concat("axon/ip/dns/history/", $entity)
     return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getDomainPDNS(entity) {
-    $api_url = $lib.str.concat("/axon/domain/dns/history/", $entity)
-
-    if ($lib.debug) {
-        $lib.print("Calling API URL: {url}", url=$api_url)
-    }
+    $api_url = $lib.str.concat("axon/domain/dns/history/", $entity)
     return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getExtraDomainPDNS(entity) {
-    $api_url = $lib.str.concat("/axon/domain/dns/extra/", $entity)
-
-    if ($lib.debug) {
-        $lib.print("Calling API URL: {url}", url=$api_url)
-    }
+    $api_url = $lib.str.concat("axon/domain/dns/extra/", $entity)
     return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getDomainSubdomains(entity) {
-    $api_url = $lib.str.concat("/axon/domain/subdomains/", $entity)
-
-    if ($lib.debug) {
-        $lib.print("Calling API URL: {url}", url=$api_url)
-    }
+    $api_url = $lib.str.concat("axon/domain/subdomains/", $entity)
     return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getDomainCrawlHistory(entity) {
-    $api_url = $lib.str.concat("/axon/ip/crawl/history/", $entity)
-
-    if ($lib.debug) {
-        $lib.print("Calling API URL: {url}", url=$api_url)
-    }
+    $api_url = $lib.str.concat("axon/ip/crawl/history/", $entity)
     return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getIpCrawlHistory(entity) {
-    $api_url = $lib.str.concat("/axon/ip/crawl/history/", $entity)
-
-    if ($lib.debug) {
-        $lib.print("Calling API URL: {url}", url=$api_url)
-    }
+    $api_url = $lib.str.concat("axon/ip/crawl/history/", $entity)
     return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getAdvancedSearchResults(query) {
-    $api_url = $lib.str.concat("/axon/advanced/query?query_string=", $lib.inet.http.urlencode($query))
-
-    if ($lib.debug) {
-        $lib.print("Calling API URL: {url}", url=$api_url)
-    }
-    
+    $api_url = $lib.str.concat("axon/advanced/query?query_string=", $lib.inet.http.urlencode($query))
     return($privsep.makeValidinAPIRequest($api_url))
 }
 
 function getDomainRegHistory(entity) {
-    $api_url = $lib.str.concat("/axon/domain/registration/history/", $entity)
-
-    if ($lib.debug) {
-        $lib.print("Calling API URL: {url}", url=$api_url)
-    }
-
+    $api_url = $lib.str.concat("axon/domain/registration/history/", $entity)
     return($privsep.makeValidinAPIRequest($api_url))
 }
