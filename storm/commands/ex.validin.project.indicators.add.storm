@@ -7,6 +7,8 @@ $api_key_set = $privsep.getValidinAPIKey()
 
 if ($api_key_set != $lib.false) {
 
+    $project_guid = $cmdopts.project_guid
+
     // Initialize payload structure
     $payload = ({
         "types": ({
@@ -35,13 +37,12 @@ if ($api_key_set != $lib.false) {
         }
     }
     
-    if ($lib.debug) {
-        $lib.print(`Adding {$node.form()}={$indicator_value} to project {$cmdopts.project_guid}`)
-    }
+    $privsep.debugPrint("Add", `Starting add {$node.form()}={$indicator_value}`)
     
-    $result = $api.addProjectIndicators($cmdopts.project_guid, $payload)
+    $result = $api.addProjectIndicators($project_guid, $payload)
     if ($result) {
-        $lib.print(`Successfully added {$node.form()}={$indicator_value} to project`)
+        $privsep.manageProjectEdge("add", $project_guid, $node)
+        $privsep.debugPrint("Add", `Successfully added {$node.form()}={$indicator_value}`)
     } else {
         $lib.warn(`Failed to add indicator to project`)
     }

@@ -4,7 +4,9 @@
     "url": "https://github.com/EXC3L-ONE"
   },
   "build": {
-    "time": 1750267438087
+    "synapse:commit": "68ec8184b0e2469fd1ef30cbeb29f5989c60c768",
+    "synapse:version": "2.212.0",
+    "time": 1754496611408
   },
   "commands": [
     {
@@ -44,7 +46,7 @@
           "user"
         ]
       ],
-      "storm": "init {\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n\n    if ($cmdopts.self) {\n        $lib.print(\"Setting Validin API key for the current user.\")\n    } else {\n        $lib.print(\"Setting Validin API key for all users.\")\n    }\n\n    $key_status_ok = $privsep.setValidinAPIKey($cmdopts.apikey, $cmdopts.self)\n\n    if ($key_status_ok) {\n        if ($lib.debug) {$lib.print(\"Validin API key set successfully\")}\n    } else {\n        $lib.warn(\"Failed setting the key for the Validin API. Check if the token you provided is valid.\")\n    }\n\n}"
+      "storm": "init {\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n\n    if ($cmdopts.self) {\n        $lib.print(\"Setting Validin API key for the current user.\")\n    } else {\n        $lib.print(\"Setting Validin API key for all users.\")\n    }\n\n    $key_status_ok = $privsep.setValidinAPIKey($cmdopts.apikey, $cmdopts.self)\n\n    if ($key_status_ok) {\n        $privsep.debugPrint(\"Setup\", \"Validin API key set successfully\")\n    } else {\n        $lib.warn(\"Failed setting the key for the Validin API. Check if the token you provided is valid.\")\n    }\n\n}"
     },
     {
       "cmdargs": [
@@ -88,7 +90,7 @@
           "user"
         ]
       ],
-      "storm": "init {\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n\n    $lib.print(\"Setting Validin API hostname for all users.\")\n\n\n    $hostname_status_ok = $privsep.setValidinAPIHostname($cmdopts.hostname)\n    if ($hostname_status_ok) {\n        if ($lib.debug) {$lib.print(\"Validin API hostname set successfully\")}\n    } \n\n}"
+      "storm": "init {\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n\n    $lib.print(\"Setting Validin API hostname for all users.\")\n\n\n    $hostname_status_ok = $privsep.setValidinAPIHostname($cmdopts.hostname)\n    if ($hostname_status_ok) {\n        $privsep.debugPrint(\"Setup\", `Validin API hostname set successfully: {$cmdopts.hostname}`)\n    } \n\n}"
     },
     {
       "cmdargs": [
@@ -241,13 +243,288 @@
         ]
       ],
       "storm": "init {\n    $api = $lib.import(ex.validin.api, debug=$lib.debug)\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n}\n\n$api_key_set = $privsep.getValidinAPIKey()\n\nif ($api_key_set != $lib.false) {\n\n    $search_results = $api.getAdvancedSearchResults($cmdopts.query)\n    if ($search_results) {\n        yield $privsep.parseCrawlResponse($search_results, create_query=$lib.true, query=$cmdopts.query)\n    }\n\n\n} else {\n    $lib.exit(\"Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first\")\n}"
+    },
+    {
+      "cmdargs": [
+        [
+          "--yield",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Yield the newly created nodes rather than the input inet:fqdn nodes.",
+            "type": "bool"
+          }
+        ],
+        [
+          "--debug",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Show verbose debug output.",
+            "type": "bool"
+          }
+        ]
+      ],
+      "descr": "Fetches WHOIS registration history for given `inet:fqdn` nodes.",
+      "forms": {
+        "inputs": [
+          "inet:fqdn"
+        ]
+      },
+      "name": "ex.validin.whois",
+      "perms": [
+        [
+          "ex",
+          "validin",
+          "user"
+        ]
+      ],
+      "storm": "init {\n    $api = $lib.import(ex.validin.api, debug=$lib.debug)\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n}\n\n$api_key_set = $privsep.getValidinAPIKey()\n\nif ($api_key_set != $lib.false) {\n    if ($lib.debug) {\n        $lib.print(\"Getting registration history for {d}\", d=$node.repr())\n    }\n\n    $data = $api.getDomainRegHistory($node.repr())\n    \n    if ($data) {\n        divert $cmdopts.yield $privsep.emitDomainRegHistory($data)\n    } \n} else {\n    $lib.exit(\"Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first\")\n}\n"
+    },
+    {
+      "cmdargs": [
+        [
+          "--yield",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Yield the newly created nodes rather than the input nodes.",
+            "type": "bool"
+          }
+        ],
+        [
+          "--debug",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Show verbose debug output.",
+            "type": "bool"
+          }
+        ]
+      ],
+      "descr": "Retrieves Validin projects and creates proj:project nodes",
+      "name": "ex.validin.project.list",
+      "perms": [
+        [
+          "ex",
+          "validin",
+          "user"
+        ]
+      ],
+      "storm": "init {\n    $api = $lib.import(ex.validin.api, debug=$lib.debug)\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n}\n\n$api_key_set = $privsep.getValidinAPIKey()\n\nif ($api_key_set != $lib.false) {\n\n    $project_data = $api.getProjectList()\n    if ($project_data) {\n        divert $cmdopts.yield $privsep.parseProjectList($project_data)\n    } else {\n        $lib.warn(\"Failed to retrieve project list from Validin API\")\n    }\n\n} else {\n    $lib.exit(\"Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first\")\n} "
+    },
+    {
+      "cmdargs": [
+        [
+          "--yield",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Yield the newly created indicator nodes rather than the input proj:project nodes.",
+            "type": "bool"
+          }
+        ],
+        [
+          "--all",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Process all Validin proj:project nodes instead of requiring input nodes.",
+            "type": "bool"
+          }
+        ],
+        [
+          "--debug",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Show verbose debug output.",
+            "type": "bool"
+          }
+        ]
+      ],
+      "descr": "Retrieves and syncs indicators from Validin projects to Synapse",
+      "forms": {
+        "inputs": [
+          "proj:project"
+        ]
+      },
+      "name": "ex.validin.project.indicators.get",
+      "perms": [
+        [
+          "ex",
+          "validin",
+          "user"
+        ]
+      ],
+      "storm": "init {\n    $api = $lib.import(ex.validin.api, debug=$lib.debug)\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n}\n\n$api_key_set = $privsep.getValidinAPIKey()\n\nif ($api_key_set != $lib.false) {\n    $project_guid = $node.repr()\n    $validin_guid = $node.props.get(\"_validin:guid\")\n    \n    $privsep.debugPrint(\"Get\", `Starting get indicators for {$validin_guid}`)\n    \n    $indicator_data = $api.getProjectIndicators($validin_guid)\n    if ($indicator_data) {\n        if ($cmdopts.yield) {\n            yield $privsep.parseProjectIndicators($indicator_data, $project_guid)\n        } else {\n            $privsep.parseProjectIndicators($indicator_data, $project_guid)\n        }\n        $privsep.debugPrint(\"Get\", `Successfully retrieved indicators`)\n    } else {\n        $lib.warn(`Failed to retrieve indicators for project: {$validin_guid}`)\n    }\n\n} else {\n    $lib.exit(\"Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first\")\n} "
+    },
+    {
+      "cmdargs": [
+        [
+          "project_guid",
+          {
+            "help": "The Validin project GUID to add indicators to",
+            "type": "str"
+          }
+        ],
+        [
+          "--debug",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Show verbose debug output.",
+            "type": "bool"
+          }
+        ]
+      ],
+      "descr": "Adds indicators to a Validin project and creates project links in Synapse",
+      "forms": {
+        "inputs": [
+          "inet:fqdn",
+          "inet:ipv4",
+          "inet:ipv6",
+          "hash:md5",
+          "hash:sha1",
+          "hash:sha256"
+        ]
+      },
+      "name": "ex.validin.project.indicators.add",
+      "perms": [
+        [
+          "ex",
+          "validin",
+          "user"
+        ]
+      ],
+      "storm": "init {\n    $api = $lib.import(ex.validin.api, debug=$lib.debug)\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n}\n\n$api_key_set = $privsep.getValidinAPIKey()\n\nif ($api_key_set != $lib.false) {\n\n    $project_guid = $cmdopts.project_guid\n\n    // Initialize payload structure\n    $payload = ({\n        \"types\": ({\n            \"dom\": ([]),\n            \"ip\": ([]),\n            \"hash\": ([]),\n            \"raw\": ([])\n        })\n    })\n    \n    $indicator_value = $node.repr()\n    \n    switch $node.form() {\n        \"inet:fqdn\": {\n            $payload.types.dom.append($indicator_value)\n        }\n        (\"inet:ipv4\", \"inet:ipv6\"): {\n            $payload.types.ip.append($indicator_value)\n        }\n        (\"hash:md5\", \"hash:sha1\", \"hash:sha256\"): {\n            $payload.types.hash.append($indicator_value)\n        }\n        *: { \n            $lib.warn(\"Unsupported form for indicator addition: {f}\", f=$node.form()) \n            return()\n        }\n    }\n    \n    $privsep.debugPrint(\"Add\", `Starting add {$node.form()}={$indicator_value}`)\n    \n    $result = $api.addProjectIndicators($project_guid, $payload)\n    if ($result) {\n        $privsep.manageProjectEdge(\"add\", $project_guid, $node)\n        $privsep.debugPrint(\"Add\", `Successfully added {$node.form()}={$indicator_value}`)\n    } else {\n        $lib.warn(`Failed to add indicator to project`)\n    }\n\n} else {\n    $lib.exit(\"Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first\")\n} "
+    },
+    {
+      "cmdargs": [
+        [
+          "project_guid",
+          {
+            "help": "The Validin project GUID to remove indicators from",
+            "type": "str"
+          }
+        ],
+        [
+          "--debug",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Show verbose debug output.",
+            "type": "bool"
+          }
+        ]
+      ],
+      "descr": "Removes indicators from a Validin project and cleans up project links in Synapse",
+      "forms": {
+        "inputs": [
+          "inet:fqdn",
+          "inet:ipv4",
+          "inet:ipv6",
+          "hash:md5",
+          "hash:sha1",
+          "hash:sha256"
+        ]
+      },
+      "name": "ex.validin.project.indicators.delete",
+      "perms": [
+        [
+          "ex",
+          "validin",
+          "user"
+        ]
+      ],
+      "storm": "init {\n    $api = $lib.import(ex.validin.api, debug=$lib.debug)\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n}\n\n$api_key_set = $privsep.getValidinAPIKey()\n\nif ($api_key_set != $lib.false) {\n\n    $project_guid = $cmdopts.project_guid\n\n    // Initialize payload structure\n    $payload = ({\n        \"types\": ({\n            \"dom\": ([]),\n            \"ip\": ([]),\n            \"hash\": ([]),\n            \"raw\": ([])\n        })\n    })\n    \n    $indicator_value = $node.repr()\n    \n    switch $node.form() {\n        \"inet:fqdn\": {\n            $payload.types.dom.append($indicator_value)\n        }\n        (\"inet:ipv4\", \"inet:ipv6\"): {\n            $payload.types.ip.append($indicator_value)\n        }\n        (\"hash:md5\", \"hash:sha1\", \"hash:sha256\"): {\n            $payload.types.hash.append($indicator_value)\n        }\n        *: { \n            $lib.warn(\"Unsupported form for indicator deletion: {f}\", f=$node.form()) \n            return()\n        }\n    }\n    \n    $privsep.debugPrint(\"Delete\", `Starting delete {$node.form()}={$indicator_value}`)\n    \n    $result = $api.deleteProjectIndicators($project_guid, $payload)\n    if ($result) {\n        $privsep.manageProjectEdge(\"remove\", $project_guid, $node)\n        $privsep.debugPrint(\"Delete\", `Successfully deleted {$node.form()}={$indicator_value}`)\n    } else {\n        $lib.warn(`Failed to delete indicator from project`)\n    }\n\n} else {\n    $lib.exit(\"Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first\")\n} "
+    },
+    {
+      "cmdargs": [
+        [
+          "project_guid",
+          {
+            "help": "The Validin project GUID to set as active",
+            "type": "str"
+          }
+        ],
+        [
+          "--self",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Set the project as a user variable. If not used, the project is set globally.",
+            "type": "bool"
+          }
+        ]
+      ],
+      "descr": "Sets the active Validin project for indicator management operations",
+      "forms": {
+        "inputs": [
+          "proj:project"
+        ]
+      },
+      "name": "ex.validin.project.set",
+      "perms": [
+        [
+          "ex",
+          "validin",
+          "user"
+        ]
+      ],
+      "storm": "init {\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n}\n\n$privsep.debugPrint(\"Set\", `Starting set active project {$cmdopts.project_guid}`)\n\n$result = $privsep.setValidinActiveProject($cmdopts.project_guid, $cmdopts.self)\n\nif ($result) {\n    $scope = \"globally\"\n    if ($cmdopts.self) {\n        $scope = \"for your user\"\n    }\n    \n    proj:project=$cmdopts.project_guid {\n        $project_name = $node.props.get(\"name\")\n        if ($project_name = $lib.null) {\n            $project_name = \"Unknown\"\n        }\n        $lib.print(`Successfully set active Validin project {$scope}: {$project_name} ({$cmdopts.project_guid})`)\n    }\n} else {\n    $lib.warn(\"Failed to set active project. Ensure the project exists in Synapse.\")\n}"
+    },
+    {
+      "cmdargs": [
+        [
+          "--mode",
+          {
+            "choices": [
+              "pull",
+              "push",
+              "draft"
+            ],
+            "default": "pull",
+            "help": "Sync mode: pull (Validin->Synapse, default), push (Synapse->Validin), draft (dry-run preview). Use separate cron jobs for bidirectional sync.",
+            "type": "str"
+          }
+        ],
+        [
+          "--yield",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Yield the proj:project nodes.",
+            "type": "bool"
+          }
+        ],
+        [
+          "--debug",
+          {
+            "action": "store_true",
+            "default": false,
+            "help": "Show verbose debug output.",
+            "type": "bool"
+          }
+        ]
+      ],
+      "descr": "Synchronizes all Validin projects with Synapse using additive-only operations (designed for CLI/cron usage)",
+      "name": "ex.validin.project.sync",
+      "perms": [
+        [
+          "ex",
+          "validin",
+          "user"
+        ]
+      ],
+      "storm": "init {\n    $api = $lib.import(ex.validin.api, debug=$lib.debug)\n    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n}\n\n$api_key_set = $privsep.getValidinAPIKey()\n\nif ($api_key_set != $lib.false) {\n\n    $privsep.debugPrint(\"Sync\", `Starting {$cmdopts.mode} mode sync`)\n\n    $project_list_data = $api.getProjectList()\n    if (not $project_list_data) {\n        $lib.warn(\"Failed to retrieve project list from Validin API\")\n        return()\n    }\n\n    $privsep.parseProjectList($project_list_data)\n\n    for ($project_id, $project_info) in $project_list_data.projects {\n        proj:project=$project_id {\n            $privsep.performProjectSync($node, $cmdopts.mode)\n            \n            if ($cmdopts.yield) {\n                yield $node\n            }\n        }\n    }\n\n    $privsep.debugPrint(\"Sync\", `Completed {$cmdopts.mode} mode sync`)\n\n} else {\n    $lib.exit(\"Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first\")\n}"
     }
   ],
   "desc": "The ex-validin package provides an interface to the Validin API allowing for enrichment of `inet:ipv4` and `inet:fqdn` nodes.",
   "modules": [
     {
       "name": "ex.validin.api",
-      "storm": "$privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n\n\nfunction getIpPDNS(entity) {\n    $api_url = $lib.str.concat(\"/axon/ip/dns/history/\", $entity)\n\n    if ($lib.debug) {\n        $lib.print(\"Calling API URL: {url}\", url=$api_url)\n    }\n\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getDomainPDNS(entity) {\n    $api_url = $lib.str.concat(\"/axon/domain/dns/history/\", $entity)\n\n    if ($lib.debug) {\n        $lib.print(\"Calling API URL: {url}\", url=$api_url)\n    }\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getExtraDomainPDNS(entity) {\n    $api_url = $lib.str.concat(\"/axon/domain/dns/extra/\", $entity)\n\n    if ($lib.debug) {\n        $lib.print(\"Calling API URL: {url}\", url=$api_url)\n    }\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getDomainSubdomains(entity) {\n    $api_url = $lib.str.concat(\"/axon/domain/subdomains/\", $entity)\n\n    if ($lib.debug) {\n        $lib.print(\"Calling API URL: {url}\", url=$api_url)\n    }\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getDomainCrawlHistory(entity) {\n    $api_url = $lib.str.concat(\"/axon/ip/crawl/history/\", $entity)\n\n    if ($lib.debug) {\n        $lib.print(\"Calling API URL: {url}\", url=$api_url)\n    }\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getIpCrawlHistory(entity) {\n    $api_url = $lib.str.concat(\"/axon/ip/crawl/history/\", $entity)\n\n    if ($lib.debug) {\n        $lib.print(\"Calling API URL: {url}\", url=$api_url)\n    }\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getAdvancedSearchResults(query) {\n    $api_url = $lib.str.concat(\"/axon/advanced/query?query_string=\", $lib.inet.http.urlencode($query))\n\n    if ($lib.debug) {\n        $lib.print(\"Calling API URL: {url}\", url=$api_url)\n    }\n    \n    return($privsep.makeValidinAPIRequest($api_url))\n}"
+      "storm": "$privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)\n\nfunction getProjectList() {\n    $api_url = \"project/list\"\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getProjectIndicators(project_id) {\n    $api_url = $lib.str.concat(\"project/\", $project_id, \"/indicators\")\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction addProjectIndicators(project_id, indicator_data) {\n    $api_url = $lib.str.concat(\"project/\", $project_id, \"/indicators/add\")\n    return($privsep.makeValidinAPIRequest($api_url, method=\"POST\", post_data=$indicator_data))\n}\n\nfunction deleteProjectIndicators(project_id, indicator_data) {\n    $api_url = $lib.str.concat(\"project/\", $project_id, \"/indicators/delete\")\n    return($privsep.makeValidinAPIRequest($api_url, method=\"POST\", post_data=$indicator_data))\n}\n\nfunction getIpPDNS(entity) {\n    $api_url = $lib.str.concat(\"axon/ip/dns/history/\", $entity)\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getDomainPDNS(entity) {\n    $api_url = $lib.str.concat(\"axon/domain/dns/history/\", $entity)\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getExtraDomainPDNS(entity) {\n    $api_url = $lib.str.concat(\"axon/domain/dns/extra/\", $entity)\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getDomainSubdomains(entity) {\n    $api_url = $lib.str.concat(\"axon/domain/subdomains/\", $entity)\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getDomainCrawlHistory(entity) {\n    $api_url = $lib.str.concat(\"axon/ip/crawl/history/\", $entity)\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getIpCrawlHistory(entity) {\n    $api_url = $lib.str.concat(\"axon/ip/crawl/history/\", $entity)\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getAdvancedSearchResults(query) {\n    $api_url = $lib.str.concat(\"axon/advanced/query?query_string=\", $lib.inet.http.urlencode($query))\n    return($privsep.makeValidinAPIRequest($api_url))\n}\n\nfunction getDomainRegHistory(entity) {\n    $api_url = $lib.str.concat(\"axon/domain/registration/history/\", $entity)\n    return($privsep.makeValidinAPIRequest($api_url))\n}"
     },
     {
       "asroot:perms": [
@@ -258,7 +535,7 @@
         ]
       ],
       "name": "ex.validin.privsep",
-      "storm": "function getMetaSource() {\n    [ meta:source=$lib.guid(\"validin\", \"ex\", \"powerup\") :name=\"validin\" ]\n    return($node)\n}\n\nfunction getValidinAPIKey() {\n    // see if the user has their own key set\n    $apikey = $lib.user.vars.get(\"validin:apikey\")\n    if ($apikey) {\n        return($apikey)\n    }\n\n    // no user key, check for global\n    $apikey = $lib.globals.get(\"validin:apikey\")\n    if ($apikey) {\n        return($apikey)\n    }\n \n    return($lib.false)\n}\n\nfunction setValidinExtendedProps() {\n\n    $validin_prop_list = ([])\n\n    $existing_props = $lib.model.ext.getExtModel().props\n    for $prop in $existing_props {\n        if ($prop.0 = 'inet:http:request') {\n            $validin_prop_list.append($prop.1)\n        }\n    }\n\n    if (not $validin_prop_list.has('_validin:body_hash')) {\n        $propinfo = ({'doc': 'The SHA1 hash of the body observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:body_hash, (hash:sha1, $({})), $propinfo)\n    } if (not $validin_prop_list.has('_validin:favicon_hash')) {\n        $propinfo = ({'doc': 'The MD5 hash of the favicon observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:favicon_hash, (hash:md5, ({})), $propinfo)\n    } if (not $validin_prop_list.has('_validin:class_0_hash')) {\n        $propinfo = ({'doc': 'The v0.0 version of the MD5 hash of the HTML classes observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:class_0_hash, (hash:md5, ({})), $propinfo)\n    } if (not $validin_prop_list.has('_validin:class_1_hash')) {\n        $propinfo = ({'doc': 'The v0.1 version of the MD5 hash of the HTML classes observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:class_1_hash, (hash:md5, ({})), $propinfo)\n    } if (not $validin_prop_list.has('_validin:banner_0_hash')) {\n        $propinfo = ({'doc': 'The v0.0 version of the MD5 hash of the banners observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:banner_0_hash, (hash:md5, ({})), $propinfo)\n    } if (not $validin_prop_list.has('_validin:title')) {\n        $propinfo = ({'doc': 'The title of the HTML site observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:title, (str, ({})), $propinfo)\n    }\n}\n\nfunction setValidinAPIKey(key, self) {\n    if ($self) {\n        $lib.user.vars.set(\"validin:apikey\", `Bearer {$key}`)\n    } else {\n        $lib.globals.set(\"validin:apikey\", `Bearer {$key}`)\n    }\n    return($checkValidinAPIKey())\n}\n\nfunction checkValidinAPIKey() {\n    $resp = $makeValidinAPIRequest(\"ping\")\n        \n    if ($resp.status = \"OK\") {\n        return($lib.true)\n    } else {\n        return($lib.false)\n    }\n}\n\nfunction getTagPrefix() {\n    return($lib.globals.get(\"ex.validin:tag-prefix\", default=rep.validin))\n}\n\nfunction setTagPrefix(prefix) {\n    ($ok, $norm) = $lib.trycast(syn:tag:part, $prefix)\n    if (not $ok) {\n        $lib.warn(\"failed to set tag prefix, invalid value: {s}\", s=$prefix)\n        return($lib.null)\n    }\n\n    $lib.globals.set(\"ex.validin:tag-prefix\", $prefix)\n}\n\nfunction setValidinAPIHostname(hostname) {\n    ($ok, $hostname_normalised) = $lib.trycast(inet:fqdn, $hostname)\n    if ($ok) {\n        $lib.globals.set(\"validin:api-hostname\", $hostname)\n        return($lib.true)\n    } else {\n        $lib.warn(\"Failed to set Validin API hostname, couldn't normalise value to a domain: {s}\", s=$hostname)\n        return($lib.false)\n    }\n    \n}\n\nfunction makeValidinAPIRequest(api_endpoint) {\n    $api_hostname = $lib.globals.get(\"validin:api-hostname\", default=\"api.validin.com\")\n    $url = `https://{$api_hostname}/api/{$api_endpoint}`\n\n    $resp = $lib.inet.http.get($url, headers=({\"Authorization\": $getValidinAPIKey()}))\n\n    if ($resp.code != 200) { \n        $lib.warn(\"Validin API request failed with code {c}\", c=$resp.code)\n        return($lib.null) \n    }\n\n    $json = $resp.body.json()\n\n    return($json)\n}\n\nfunction parseDomains(data) {\n\n    $srcnode = $getMetaSource()\n\n    for $domain in $data.domains {\n        [inet:fqdn=$domain.fqdn]\n    }\n    | uniq |\n    [<(seen)+ { yield $srcnode }]\n\n}\n\nfunction parseCrawlResponse(data, create_query=$lib.false, query=\"\") {\n\n    $srcnode = $getMetaSource()\n    $query_time = $lib.time.now()\n    $query_created = $lib.false\n\n    for $crawl in $data.records.crawlr {\n        if (not $crawl.value.error) {\n\n            $banners = ([])\n            for $banner in $crawl.value.banner_full { if ($banner ~=\": \") { $banners.append($banner.split(\": \")) }}\n\n            if ($crawl.value.location) { $url = $crawl.value.location }\n            elif ($crawl.value.host and $crawl.value.port and $crawl.value.port != 80 and $crawl.value.port != 443) { $url = `{$crawl.value.scheme}://{$crawl.value.host}:{$crawl.value.port}` } \n            elif ($crawl.value.host) { $url = `{$crawl.value.scheme}://{$crawl.value.host}` }\n            elif ($crawl.value.ip and $crawl.value.port and $crawl.value.port != 80 and $crawl.value.port != 443 ) { $url = `{$crawl.value.scheme}://{$crawl.value.ip}:{$crawl.value.port}` }\n            else { $url = `{$crawl.value.scheme}://{$crawl.value.ip}` }\n\n            [(inet:http:request=(\"validin\", $crawl.key, $crawl.first_seen, $crawl.last_seen)\n                :url*unset=$url\n                :time*unset=$lib.time.fromunix($crawl.first_seen)\n                :server*unset=`tcp://{$crawl.value.ip}:{$crawl.value.port}`\n                :response:headers*unset=$banners\n                :response:code*unset?=$lib.regex.search(\" (\\d{3}) \", $crawl.value.start_line).0\n                :_validin:body_hash*unset?=$crawl.value.body_hash\n                :_validin:favicon_hash*unset?=$crawl.value.favicon_hash\n                :_validin:class_0_hash*unset?=$crawl.value.class_0_hash\n                :_validin:class_1_hash*unset?=$crawl.value.class_1_hash\n                :_validin:banner_0_hash*unset?=$crawl.value.banner_0_hash\n                :flow={[inet:flow=(\"validin\", $crawl.key, $crawl.first_seen, $crawl.last_seen, $crawl.value.port, $crawl.value.scheme)\n                    :dst*unset=`tcp://{$crawl.value.ip}:{$crawl.value.port}`\n                    :dst:handshake*unset=$crawl.value.banner\n                    :dst:txbytes*unset=$crawl.value.length\n                    :time*unset=$lib.time.fromunix($crawl.first_seen)\n                    :dst:ssl:cert?={[crypto:x509:cert=$lib.gen.cryptoX509CertBySha256($crawl.value.cert_fingerprint_sha256) \n                                        :validity:notafter*unset=$crawl.value.cert.not_after\n                                        :validity:notbefore*unset=$crawl.value.cert.not_before\n                                        :issuer*unset=$crawl.value.cert.issuer.replace(\"/\", \" \")\n                    ]}\n                ]}\n            )]\n\n            for $anchor in $crawl.value.ext_links.anchors {\n                [+(_validin:anchor)> {[inet:fqdn=$anchor]}]\n            }\n        }\n\n        if ($crawl.value.cert_details.jarm) {\n            { [(inet:ssl:jarmsample=(`tcp://{$crawl.value.ip}:{$crawl.value.port}`, $crawl.value.cert_details.jarm) .seen=($crawl.first_seen, $crawl.last_seen) )] }\n        }\n\n    }\n    | uniq |\n    [<(seen)+ { yield $srcnode }]\n\n    if ($create_query) { \n        if (not $query_created) {\n            $query_node = $createQueryNode($query)\n            $query_created = $lib.true\n        }\n\n        [ <(found)+ { yield $query_node } ]\n    }\n}\n\nfunction createQueryNode(query) {\n    [it:exec:query=(\"validin\", $lib.time.now(), $query)\n                            :text=$query\n                            :time=$lib.time.now()\n                            :language=validin\n                            :synuser=$lib.user.iden\n                            :api:url=`https://{$lib.globals.get(\"validin:api-hostname\", default=\"api.validin.com\")}/api/axon/advanced/query`\n    ]\n    return($node)\n}\n\nfunction parseDomainPDNS(data) {\n\n    $srcnode = $getMetaSource()\n\n    tee {\n        for $dns_a in $data.records.A {\n            $first = $lib.time.fromunix($dns_a.first_seen)\n            $last  = $lib.time.fromunix($dns_a.last_seen)\n            [ inet:dns:a=(\n                { [ inet:fqdn=$dns_a.key   .seen=($first,$last) ] },\n                { [ inet:ipv4=$dns_a.value .seen=($first,$last) ] }\n            ) .seen=($first,$last) ]\n        }\n\n        for $dns_ns in $data.records.NS {\n            $first = $lib.time.fromunix($dns_ns.first_seen)\n            $last  = $lib.time.fromunix($dns_ns.last_seen)\n            [ inet:dns:ns=(\n                { [ inet:fqdn=$dns_ns.key   .seen=($first,$last) ] },\n                { [ inet:fqdn=$dns_ns.value .seen=($first,$last) ] }\n            ) .seen=($first,$last) ]\n        }\n\n        for $dns_aaaa in $data.records.AAAA {\n            $first = $lib.time.fromunix($dns_aaaa.first_seen)\n            $last  = $lib.time.fromunix($dns_aaaa.last_seen)\n            [ inet:dns:aaaa=(\n                { [ inet:fqdn=$dns_aaaa.key   .seen=($first,$last) ] },\n                { [ inet:ipv6=$dns_aaaa.value .seen=($first,$last) ] }\n            ) .seen=($first,$last) ]\n        }\n\n        for $dns_mx in $data.records.MX {\n            $first = $lib.time.fromunix($dns_mx.first_seen)\n            $last  = $lib.time.fromunix($dns_mx.last_seen)\n            [ inet:dns:mx=(\n                { [ inet:fqdn=$dns_mx.key   .seen=($first,$last) ] },\n                { [ inet:fqdn=$dns_mx.value .seen=($first,$last) ] }\n            ) .seen=($first,$last) ]\n        }\n\n        for $dns_txt in $data.records.TXT {\n            $first = $lib.time.fromunix($dns_txt.first_seen)\n            $last  = $lib.time.fromunix($dns_txt.last_seen)\n            [ inet:dns:txt=(\n                { [ inet:fqdn=$dns_txt.key .seen=($first,$last) ] },\n                $dns_txt.value\n            ) .seen=($first,$last) ]\n        }\n    }\n\n    | uniq |\n    [<(seen)+ { yield $srcnode }]\n\n}\n\nfunction parseIpPDNS(data) {\n\n    $srcnode = $getMetaSource()\n\n    for $dns_a in $data.records.A {\n        $first = $lib.time.fromunix($dns_a.first_seen)\n        $last = $lib.time.fromunix($dns_a.last_seen)\n        [ inet:dns:a=(\n            { [ inet:fqdn=$dns_a.value .seen=($first, $last) ] },\n            { [ inet:ipv4=$dns_a.key .seen=($first, $last) ] }\n        ) .seen=($first, $last) ]\n    }\n\n    [<(seen)+ { yield $srcnode }]\n    | uniq\n\n}"
+      "storm": "function getMetaSource() {\n    [ meta:source=$lib.guid(\"validin\", \"ex\", \"powerup\") :name=\"validin\" ]\n    return($node)\n}\n\nfunction debugPrint(operation_type, details) {\n    /*\n    Simple debug helper for consistent logging format\n    */\n    if $lib.debug {\n        $lib.print(`{$operation_type}: {$details}`)\n    }\n}\n\nfunction manageProjectEdge(action, project_guid, node) {\n    /*\n    Minimal edge management for project relationships\n    */\n    switch $action {\n        \"add\": {\n            [ <(refs)+ { proj:project=$project_guid } ]\n        }\n        \"remove\": {\n            [ <(refs)- { proj:project=$project_guid } ]\n        }\n    }\n}\n\nfunction getValidinAPIKey() {\n    // see if the user has their own key set\n    $apikey = $lib.user.vars.get(\"validin:apikey\")\n    if ($apikey) {\n        return($apikey)\n    }\n\n    // no user key, check for global\n    $apikey = $lib.globals.get(\"validin:apikey\")\n    if ($apikey) {\n        return($apikey)\n    }\n \n    return($lib.false)\n}\n\nfunction getValidinActiveProject() {\n    // see if the user has their own active project set\n    $project_guid = $lib.user.vars.get(\"validin:active_project\")\n    if ($project_guid) {\n        return($project_guid)\n    }\n\n    // no user project, check for global\n    $project_guid = $lib.globals.get(\"validin:active_project\")\n    if ($project_guid) {\n        return($project_guid)\n    }\n \n    return($lib.false)\n}\n\nfunction setValidinActiveProject(guid, self) {\n    // Validate the project GUID exists in our system first\n    $project_exists = $lib.false\n    proj:project=$guid {\n        $project_exists = $lib.true\n    }\n    \n    if (not $project_exists) {\n        $lib.warn(`Project GUID {$guid} not found in Synapse. Run 'ex.validin.project.list' first to sync projects.`)\n        return($lib.false)\n    }\n    \n    if ($self) {\n        $lib.user.vars.set(\"validin:active_project\", $guid)\n    } else {\n        $lib.globals.set(\"validin:active_project\", $guid)\n    }\n    return($lib.true)\n}\n\nfunction setValidinExtendedProps() {\n\n    $validin_prop_list = ([])\n\n    $existing_props = $lib.model.ext.getExtModel().props\n    for $prop in $existing_props {\n        if ($prop.0 = 'inet:http:request') {\n            $validin_prop_list.append($prop.1)\n        }\n    }\n\n    if (not $validin_prop_list.has('_validin:body_hash')) {\n        $propinfo = ({'doc': 'The SHA1 hash of the body observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:body_hash, (hash:sha1, $({})), $propinfo)\n    } if (not $validin_prop_list.has('_validin:favicon_hash')) {\n        $propinfo = ({'doc': 'The MD5 hash of the favicon observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:favicon_hash, (hash:md5, ({})), $propinfo)\n    } if (not $validin_prop_list.has('_validin:class_0_hash')) {\n        $propinfo = ({'doc': 'The v0.0 version of the MD5 hash of the HTML classes observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:class_0_hash, (hash:md5, ({})), $propinfo)\n    } if (not $validin_prop_list.has('_validin:class_1_hash')) {\n        $propinfo = ({'doc': 'The v0.1 version of the MD5 hash of the HTML classes observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:class_1_hash, (hash:md5, ({})), $propinfo)\n    } if (not $validin_prop_list.has('_validin:banner_0_hash')) {\n        $propinfo = ({'doc': 'The v0.0 version of the MD5 hash of the banners observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:banner_0_hash, (hash:md5, ({})), $propinfo)\n    } if (not $validin_prop_list.has('_validin:title')) {\n        $propinfo = ({'doc': 'The title of the HTML site observed by Validin'})\n        $lib.model.ext.addFormProp(inet:http:request, _validin:title, (str, ({})), $propinfo)\n    }\n\n    // Add extended property for proj:project\n    $validin_proj_prop_list = ([])\n    for $prop in $existing_props {\n        if ($prop.0 = 'proj:project') {\n            $validin_proj_prop_list.append($prop.1)\n        }\n    }\n\n    if (not $validin_proj_prop_list.has('_validin:guid')) {\n        $propinfo = ({'doc': 'The Validin project GUID'})\n        $lib.model.ext.addFormProp(proj:project, _validin:guid, (str, ({})), $propinfo)\n    }\n\n    if (not $validin_proj_prop_list.has('_validin:last_sync')) {\n        $propinfo = ({'doc': 'The timestamp of the last sync operation with Validin'})\n        $lib.model.ext.addFormProp(proj:project, _validin:last_sync, (time, ({})), $propinfo)\n    }\n}\n\nfunction setValidinAPIKey(key, self) {\n    if ($self) {\n        $lib.user.vars.set(\"validin:apikey\", `Bearer {$key}`)\n    } else {\n        $lib.globals.set(\"validin:apikey\", `Bearer {$key}`)\n    }\n    return($checkValidinAPIKey())\n}\n\nfunction checkValidinAPIKey() {\n    $resp = $makeValidinAPIRequest(\"ping\")\n        \n    if ($resp.status = \"OK\") {\n        return($lib.true)\n    } else {\n        return($lib.false)\n    }\n}\n\nfunction getTagPrefix() {\n    return($lib.globals.get(\"ex.validin:tag-prefix\", default=rep.validin))\n}\n\nfunction setTagPrefix(prefix) {\n    ($ok, $norm) = $lib.trycast(syn:tag:part, $prefix)\n    if (not $ok) {\n        $lib.warn(`failed to set tag prefix, invalid value: {$prefix}`)\n        return($lib.null)\n    }\n\n    $lib.globals.set(\"ex.validin:tag-prefix\", $prefix)\n}\n\nfunction setValidinAPIHostname(hostname) {\n    ($ok, $hostname_normalised) = $lib.trycast(inet:fqdn, $hostname)\n    if ($ok) {\n        $lib.globals.set(\"validin:api-hostname\", $hostname)\n        return($lib.true)\n    } else {\n        $lib.warn(`Failed to set Validin API hostname, couldn't normalise value to a domain: {$hostname}`)\n        return($lib.false)\n    }\n    \n}\n\nfunction makeValidinAPIRequest(api_endpoint, method=\"GET\", post_data=$lib.null) {\n    $api_hostname = $lib.globals.get(\"validin:api-hostname\", default=\"api.validin.com\")\n    $url = `https://{$api_hostname}/api/{$api_endpoint}`\n\n    if $lib.debug {\n        $lib.print(`Calling API URL: {$url} with method {$method}`)\n        if ($post_data) {\n            $lib.print(`POST data: {$post_data}`)\n        }\n    }\n\n    // Handle GET vs POST requests\n    if ($method = \"POST\") {\n        $resp = $lib.inet.http.post($url, headers=({\"Authorization\": $getValidinAPIKey(), \"Content-Type\": \"application/json\"}), json=$post_data)\n    } else {\n        $resp = $lib.inet.http.get($url, headers=({\"Authorization\": $getValidinAPIKey()}))\n    }\n\n    if ($resp.code != 200) { \n        $lib.warn(`Validin API {$method} request failed with code {$resp.code}`)\n        if $lib.debug {\n            $lib.print(`Response body: {$resp.body}`)\n        }\n        return($lib.null) \n    }\n\n    $json = $resp.body.json()\n    \n    if $lib.debug {\n        $lib.print(`API Response Code: {$resp.code}`)\n        if ($json) {\n            $lib.print(\"Processing API response data\")\n            if ($json.indicators) {\n                $lib.print(`Indicators found: {$lib.len($json.indicators)}`)\n                if ($lib.len($json.indicators) > 0) {\n                    $lib.print(`First indicator: {$json.indicators.0}`)\n                }\n            } else {\n                $lib.print(\"No 'indicators' key in response\")\n            }\n        } else {\n            $lib.print(\"API response is null/empty\")\n        }\n    }\n\n    return($json)\n}\n\nfunction parseDomains(data) {\n\n    $srcnode = $getMetaSource()\n\n    for $domain in $data.domains {\n        [inet:fqdn=$domain.fqdn]\n    }\n    | uniq |\n    [<(seen)+ { yield $srcnode }]\n\n}\n\nfunction parseCrawlResponse(data, create_query=$lib.false, query=\"\") {\n\n    $srcnode = $getMetaSource()\n    $query_time = $lib.time.now()\n    $query_created = $lib.false\n\n    for $crawl in $data.records.crawlr {\n        if (not $crawl.value.error) {\n\n            $banners = ([])\n            for $banner in $crawl.value.banner_full { if ($banner ~=\": \") { $banners.append($banner.split(\": \")) }}\n\n            if ($crawl.value.location) { $url = $crawl.value.location }\n            elif ($crawl.value.host and $crawl.value.port and $crawl.value.port != 80 and $crawl.value.port != 443) { $url = `{$crawl.value.scheme}://{$crawl.value.host}:{$crawl.value.port}` } \n            elif ($crawl.value.host) { $url = `{$crawl.value.scheme}://{$crawl.value.host}` }\n            elif ($crawl.value.ip and $crawl.value.port and $crawl.value.port != 80 and $crawl.value.port != 443 ) { $url = `{$crawl.value.scheme}://{$crawl.value.ip}:{$crawl.value.port}` }\n            else { $url = `{$crawl.value.scheme}://{$crawl.value.ip}` }\n\n            [(inet:http:request=(\"validin\", $crawl.key, $crawl.first_seen, $crawl.last_seen)\n                :url*unset=$url\n                :time*unset=$lib.time.fromunix($crawl.first_seen)\n                :server*unset=`tcp://{$crawl.value.ip}:{$crawl.value.port}`\n                :response:headers*unset=$banners\n                :response:code*unset?=$lib.regex.search(\" (\\d{3}) \", $crawl.value.start_line).0\n                :_validin:body_hash*unset?=$crawl.value.body_hash\n                :_validin:favicon_hash*unset?=$crawl.value.favicon_hash\n                :_validin:class_0_hash*unset?=$crawl.value.class_0_hash\n                :_validin:class_1_hash*unset?=$crawl.value.class_1_hash\n                :_validin:banner_0_hash*unset?=$crawl.value.banner_0_hash\n                :flow={[inet:flow=(\"validin\", $crawl.key, $crawl.first_seen, $crawl.last_seen, $crawl.value.port, $crawl.value.scheme)\n                    :dst*unset=`tcp://{$crawl.value.ip}:{$crawl.value.port}`\n                    :dst:handshake*unset=$crawl.value.banner\n                    :dst:txbytes*unset=$crawl.value.length\n                    :time*unset=$lib.time.fromunix($crawl.first_seen)\n                    :dst:ssl:cert?={[crypto:x509:cert=$lib.gen.cryptoX509CertBySha256($crawl.value.cert_fingerprint_sha256) \n                                        :validity:notafter*unset=$crawl.value.cert.not_after\n                                        :validity:notbefore*unset=$crawl.value.cert.not_before\n                                        :issuer*unset=$crawl.value.cert.issuer.replace(\"/\", \" \")\n                    ]}\n                ]}\n            )]\n\n            for $anchor in $crawl.value.ext_links.anchors {\n                [+(_validin:anchor)> {[inet:fqdn=$anchor]}]\n            }\n        }\n\n        if ($crawl.value.cert_details.jarm) {\n            { [(inet:ssl:jarmsample=(`tcp://{$crawl.value.ip}:{$crawl.value.port}`, $crawl.value.cert_details.jarm) .seen=($crawl.first_seen, $crawl.last_seen) )] }\n        }\n\n    }\n    | uniq |\n    [<(seen)+ { yield $srcnode }]\n\n    if ($create_query) { \n        if (not $query_created) {\n            $query_node = $createQueryNode($query)\n            $query_created = $lib.true\n        }\n\n        [ <(found)+ { yield $query_node } ]\n    }\n}\n\nfunction createQueryNode(query) {\n    [it:exec:query=(\"validin\", $lib.time.now(), $query)\n                            :text=$query\n                            :time=$lib.time.now()\n                            :language=validin\n                            :synuser=$lib.user.iden\n                            :api:url=`https://{$lib.globals.get(\"validin:api-hostname\", default=\"api.validin.com\")}/api/axon/advanced/query`\n    ]\n    return($node)\n}\n\nfunction parseDomainPDNS(data) {\n\n    $srcnode = $getMetaSource()\n\n    tee {\n        for $dns_a in $data.records.A {\n            $first = $lib.time.fromunix($dns_a.first_seen)\n            $last  = $lib.time.fromunix($dns_a.last_seen)\n            [ inet:dns:a=(\n                { [ inet:fqdn=$dns_a.key   .seen=($first,$last) ] },\n                { [ inet:ipv4=$dns_a.value .seen=($first,$last) ] }\n            ) .seen=($first,$last) ]\n        }\n\n        for $dns_ns in $data.records.NS {\n            $first = $lib.time.fromunix($dns_ns.first_seen)\n            $last  = $lib.time.fromunix($dns_ns.last_seen)\n            [ inet:dns:ns=(\n                { [ inet:fqdn=$dns_ns.key   .seen=($first,$last) ] },\n                { [ inet:fqdn=$dns_ns.value .seen=($first,$last) ] }\n            ) .seen=($first,$last) ]\n        }\n\n        for $dns_aaaa in $data.records.AAAA {\n            $first = $lib.time.fromunix($dns_aaaa.first_seen)\n            $last  = $lib.time.fromunix($dns_aaaa.last_seen)\n            [ inet:dns:aaaa=(\n                { [ inet:fqdn=$dns_aaaa.key   .seen=($first,$last) ] },\n                { [ inet:ipv6=$dns_aaaa.value .seen=($first,$last) ] }\n            ) .seen=($first,$last) ]\n        }\n\n        for $dns_mx in $data.records.MX {\n            $first = $lib.time.fromunix($dns_mx.first_seen)\n            $last  = $lib.time.fromunix($dns_mx.last_seen)\n            [ inet:dns:mx=(\n                { [ inet:fqdn=$dns_mx.key   .seen=($first,$last) ] },\n                { [ inet:fqdn=$dns_mx.value .seen=($first,$last) ] }\n            ) .seen=($first,$last) ]\n        }\n\n        for $dns_txt in $data.records.TXT {\n            $first = $lib.time.fromunix($dns_txt.first_seen)\n            $last  = $lib.time.fromunix($dns_txt.last_seen)\n            [ inet:dns:txt=(\n                { [ inet:fqdn=$dns_txt.key .seen=($first,$last) ] },\n                $dns_txt.value\n            ) .seen=($first,$last) ]\n        }\n    }\n\n    | uniq |\n    [<(seen)+ { yield $srcnode }]\n\n}\n\nfunction parseIpPDNS(data) {\n\n    $srcnode = $getMetaSource()\n\n    for $dns_a in $data.records.A {\n        $first = $lib.time.fromunix($dns_a.first_seen)\n        $last = $lib.time.fromunix($dns_a.last_seen)\n        [ inet:dns:a=(\n            { [ inet:fqdn=$dns_a.value .seen=($first, $last) ] },\n            { [ inet:ipv4=$dns_a.key .seen=($first, $last) ] }\n        ) .seen=($first, $last) ]\n    }\n\n    [<(seen)+ { yield $srcnode }]\n    | uniq\n\n}\n\nfunction emitDomainRegHistory(data) {\n    $srcnode = $getMetaSource()\n    for $reg in $data.records.registration {\n        $asof = $lib.time.parse($reg.date, \"%Y-%m-%d\")\n        $created = $lib.time.parse($reg.registered.0, \"%Y-%m-%dT%H:%M:%SZ\")\n        $expires = $lib.time.parse($reg.expires.0, \"%Y-%m-%dT%H:%M:%SZ\")\n        $domain = $reg.domain\n        $registrar = $reg.registrar.0\n        // create init whois node\n        [ inet:whois:rec=($domain, $asof)\n            :created=$created\n            :expires=$expires\n            :registrar=$registrar\n        ]\n        // conditional on if updated field exists\n        if $reg.updated {\n            $updated = $lib.time.parse($reg.updated.0, \"%Y-%m-%dT%H:%M:%SZ\")\n            [ :updated = $updated ] \n        }\n        // Add nameserver relationships\n        for $ns in $reg.nameservers {\n            [ inet:whois:recns=($ns, $node) ]\n        }\n    }\n    [<(seen)+ { yield $srcnode }]\n    | uniq\n}\n\nfunction parseProjectList(data) {\n    $srcnode = $getMetaSource()\n\n    for ($project_id, $project_info) in $data.projects {\n        [proj:project=$project_id\n            :_validin:guid=$project_id\n            :name=$project_info.details.name\n            :type=validin\n            :created=$lib.time.fromunix($project_info.details.create_time)\n            :desc?=$project_info.details.description\n        ]\n    }\n\n    | uniq |\n    [<(seen)+ { yield $srcnode }]\n}\n\nfunction parseProjectIndicators(data, project_guid) {\n    $srcnode = $getMetaSource()\n    \n    // First ensure the project exists\n    [ proj:project=$project_guid ]\n    \n    for $indicator in $data.indicators {\n        $indicator_key = $indicator.key\n        $key_type = $indicator.key_type\n        $added_time = $lib.time.fromunix($indicator.time)\n        \n        // Try different forms based on key_type and validation\n        if ($key_type = \"dom\") {\n            ($ok, $norm) = $lib.trycast(inet:fqdn, $indicator_key)\n            if ($ok) {\n                [ inet:fqdn=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]\n            }\n        } elif ($key_type = \"ip4\") {\n            ($ok, $norm) = $lib.trycast(inet:ipv4, $indicator_key)\n            if ($ok) {\n                [ inet:ipv4=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]\n            }\n        } elif ($key_type = \"ip6\") {\n            ($ok, $norm) = $lib.trycast(inet:ipv6, $indicator_key)\n            if ($ok) {\n                [ inet:ipv6=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]\n            }\n        } elif ($key_type = \"hash\") {\n            // Try different hash types\n            ($ok, $norm) = $lib.trycast(hash:md5, $indicator_key)\n            if ($ok) {\n                [ hash:md5=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]\n            } else {\n                ($ok, $norm) = $lib.trycast(hash:sha1, $indicator_key)\n                if ($ok) {\n                    [ hash:sha1=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]\n                } else {\n                    ($ok, $norm) = $lib.trycast(hash:sha256, $indicator_key)\n                    if ($ok) {\n                        [ hash:sha256=$norm .seen=$added_time <(refs)+ { proj:project=$project_guid } ]\n                    }\n                }\n            }\n        } else {\n            if ($lib.debug) {\n                $lib.warn(`Failed to create node for indicator: {$indicator_key} (type: {$key_type})`)\n            }\n        }\n    }\n    \n    | uniq |\n    [<(seen)+ { yield $srcnode }]\n}\n\nfunction createIndicatorWithEdge(indicator_form, indicator_value, project_guid, srcnode) {\n    /*\n    Creates an indicator node and links it to the project\n    */\n    try {\n        $current_time = $lib.time.now()\n        \n        switch $indicator_form {\n            \"inet:fqdn\": { \n                ($ok, $norm) = $lib.trycast(inet:fqdn, $indicator_value)\n                if ($ok) {\n                    [ inet:fqdn=$norm .seen=$current_time \n                      <(seen)+ { yield $srcnode } \n                      <(refs)+ { proj:project=$project_guid } ]\n                    return($norm)\n                }\n            }\n            \"inet:ipv4\": { \n                ($ok, $norm) = $lib.trycast(inet:ipv4, $indicator_value)\n                if ($ok) {\n                    [ inet:ipv4=$norm .seen=$current_time \n                      <(seen)+ { yield $srcnode } \n                      <(refs)+ { proj:project=$project_guid } ]\n                    return($norm)\n                }\n            }\n            \"inet:ipv6\": { \n                ($ok, $norm) = $lib.trycast(inet:ipv6, $indicator_value)\n                if ($ok) {\n                    [ inet:ipv6=$norm .seen=$current_time \n                      <(seen)+ { yield $srcnode } \n                      <(refs)+ { proj:project=$project_guid } ]\n                    return($norm)\n                }\n            }\n            \"hash:md5\": { \n                ($ok, $norm) = $lib.trycast(hash:md5, $indicator_value)\n                if ($ok) {\n                    [ hash:md5=$norm .seen=$current_time \n                      <(seen)+ { yield $srcnode } \n                      <(refs)+ { proj:project=$project_guid } ]\n                    return($norm)\n                }\n            }\n            \"hash:sha1\": { \n                ($ok, $norm) = $lib.trycast(hash:sha1, $indicator_value)\n                if ($ok) {\n                    [ hash:sha1=$norm .seen=$current_time \n                      <(seen)+ { yield $srcnode } \n                      <(refs)+ { proj:project=$project_guid } ]\n                    return($norm)\n                }\n            }\n            \"hash:sha256\": { \n                ($ok, $norm) = $lib.trycast(hash:sha256, $indicator_value)\n                if ($ok) {\n                    [ hash:sha256=$norm .seen=$current_time \n                      <(seen)+ { yield $srcnode } \n                      <(refs)+ { proj:project=$project_guid } ]\n                    return($norm)\n                }\n            }\n        }\n        \n        if ($lib.debug) {\n            $lib.warn(`Failed to normalize or create {$indicator_form}={$indicator_value}`)\n        }\n        return($lib.null)\n    } catch StormRuntimeError as err {\n        $lib.warn(`Failed to create indicator: {$err}`)\n        return($lib.null)\n    }\n}\n\nfunction createProjectIndicator(project_guid, indicator_form, indicator_value) {\n    try {\n        if ($lib.debug) {\n            $lib.print(`Creating indicator {$indicator_form}={$indicator_value} for project {$project_guid}`)\n        }\n        \n        // Ensure the project exists (critical for edge creation)\n        [ proj:project=$project_guid ]\n        \n        $srcnode = $getMetaSource()\n        $result = $createIndicatorWithEdge($indicator_form, $indicator_value, $project_guid, $srcnode)\n        \n        if ($result) {\n            if ($lib.debug) {\n                $lib.print(`Successfully created {$indicator_form}={$result} with project edge`)\n            }\n            return($lib.true)\n        } else {\n            return($lib.false)\n        }\n    } catch StormRuntimeError as err {\n        $lib.warn(`Failed to create indicator and project edge: {$err}`)\n        return($lib.false)\n    }\n}\n\nfunction gatherSynapseIndicators(project_node) {\n    /*\n    Collects all indicators linked to a project in Synapse\n    */\n    try {\n        $indicators = ({})\n        $project_guid = $project_node.props.get(\"_validin:guid\")\n        \n        \n        // Walk through all indicators linked to this project\n        proj:project=$project_guid -(refs)> * {\n            $form = $node.form()\n            $value = $node.repr()\n            \n            // Group by indicator type\n            if (not $indicators.$form) {\n                $indicators.$form = ([])\n            }\n            $indicators.$form.append($value)\n            \n        }\n        \n        // Remove duplicates\n        for ($form, $values) in $indicators {\n            $indicators.$form = $values.unique()\n        }\n        \n        $total_count = 0\n        for ($form, $values) in $indicators {\n            $total_count = ($total_count + $lib.len($values))\n        }\n        $debugPrint(\"Gather\", `Found {$total_count} indicators in Synapse`)\n        \n        return($indicators)\n    } catch StormRuntimeError as err {\n        $lib.warn(`Failed to gather Synapse indicators: {$err}`)\n        return(({}) /* Return empty dict on error */)\n    }\n}\n\nfunction buildValidinPayload(indicator_differences) {\n    /*\n    Converts indicators to Validin API format\n    */\n    $payload = ({\n        \"types\": ({\n            \"dom\": ([]),\n            \"ip\": ([]),\n            \"hash\": ([]),\n            \"raw\": ([])\n        })\n    })\n    \n    for ($form, $values) in $indicator_differences {\n        switch $form {\n            \"inet:fqdn\": { \n                for $value in $values {\n                    $payload.types.dom.append($value)\n                }\n            }\n            (\"inet:ipv4\", \"inet:ipv6\"): { \n                for $value in $values {\n                    $payload.types.ip.append($value)\n                }\n            }\n            (\"hash:md5\", \"hash:sha1\", \"hash:sha256\"): { \n                for $value in $values {\n                    $payload.types.hash.append($value)\n                }\n            }\n        }\n    }\n    \n    return($payload)\n}\n\nfunction calculateSyncDifferences(synapse_indicators, validin_indicators) {\n    /*\n    Figures out what indicators need to be synced between systems\n    */\n    try {\n        $differences = ({\n            \"to_add_validin\": ({}),\n            \"to_add_synapse\": ({})\n        })\n        \n        \n        // Get all indicator types from both systems\n        $all_forms = ([])\n        if ($synapse_indicators != $lib.null and $lib.len($synapse_indicators) > 0) {\n            for ($form, $values) in $synapse_indicators {\n                $all_forms.append($form)\n            }\n        }\n        if ($validin_indicators != $lib.null and $lib.len($validin_indicators) > 0) {\n            for ($form, $values) in $validin_indicators {\n                $all_forms.append($form)\n            }\n        }\n        $all_forms = $all_forms.unique()\n        \n        // Compare each indicator type\n        for $form in $all_forms {\n            $synapse_values = ([])\n            if ($synapse_indicators != $lib.null and $synapse_indicators.$form) {\n                $synapse_values = $synapse_indicators.$form\n            }\n            \n            $validin_values = ([])\n            if ($validin_indicators != $lib.null and $validin_indicators.$form) {\n                $validin_values = $validin_indicators.$form\n            }\n            \n            // Find what's missing on each side\n            $to_validin = ([])\n            $to_synapse = ([])\n            \n            // Find indicators that exist in Synapse but not Validin\n            for $synapse_item in $synapse_values {\n                if (not $validin_values.has($synapse_item)) {\n                    $to_validin.append($synapse_item)\n                }\n            }\n            \n            // Find indicators that exist in Validin but not Synapse\n            for $validin_item in $validin_values {\n                if (not $synapse_values.has($validin_item)) {\n                    $to_synapse.append($validin_item)\n                }\n            }\n            \n            // Only track types that actually have differences\n            if ($lib.len($to_validin) > 0) {\n                $differences.to_add_validin.$form = $to_validin\n            }\n            if ($lib.len($to_synapse) > 0) {\n                $differences.to_add_synapse.$form = $to_synapse\n            }\n            \n            if ($lib.debug) {\n                $lib.print(`Form {$form}: {$lib.len($to_validin)} to add to Validin, {$lib.len($to_synapse)} to add to Synapse`)\n            }\n        }\n        \n        return($differences)\n    } catch StormRuntimeError as err {\n        $lib.warn(`Failed to calculate sync differences: {$err}`)\n        return(({\n            \"to_add_validin\": ({}),\n            \"to_add_synapse\": ({})\n        }))\n    }\n}\n\nfunction performProjectSync(project_node, sync_mode) {\n    /*\n    Syncs indicators between Synapse and Validin projects (additive only - never deletes)\n    \n    Modes: \"pull\" (Validin -> Synapse), \"push\" (Synapse -> Validin), \"draft\" (dry-run)\n    Use separate cron jobs for pull and push to get bidirectional sync\n    */\n    try {\n        $project_guid = $project_node.props.get(\"_validin:guid\")\n        $project_name = $project_node.props.get(\"name\")\n        if ($project_name = $lib.null) {\n            $project_name = \"Unknown\"\n        }\n        \n        $debugPrint(\"Sync\", `Starting {$sync_mode} for '{$project_name}'`)\n        \n        // Get current indicators from both systems\n        $synapse_indicators = $gatherSynapseIndicators($project_node)\n        \n        $api = $lib.import(ex.validin.api, debug=$lib.debug)\n        $validin_data = $api.getProjectIndicators($project_guid)\n        \n        // Process Validin API response into same format as Synapse data\n        $validin_indicators = ({})\n        if ($validin_data and $validin_data.indicators) {\n            \n            for $indicator in $validin_data.indicators {\n                $form = $lib.null\n                $value = $indicator.key  // Use 'key' not 'value'\n                \n                // Convert Validin types to Synapse forms\n                switch $indicator.key_type {\n                    \"dom\": { \n                        $form = \"inet:fqdn\"\n                    }\n                    \"ip4\": { \n                        $form = \"inet:ipv4\"\n                    }\n                    \"ip6\": { \n                        $form = \"inet:ipv6\"\n                    }\n                    \"hash\": { \n                        // Try each hash type with trycast for proper validation\n                        ($ok, $norm) = $lib.trycast(\"hash:md5\", $value)\n                        if $ok { \n                            $form = \"hash:md5\" \n                        } else {\n                            ($ok, $norm) = $lib.trycast(\"hash:sha1\", $value) \n                            if $ok { \n                                $form = \"hash:sha1\" \n                            } else {\n                                ($ok, $norm) = $lib.trycast(\"hash:sha256\", $value)\n                                if $ok { \n                                    $form = \"hash:sha256\" \n                                }\n                            }\n                        }\n                    }\n                    *: {\n                        if ($lib.debug) {\n                            $lib.warn(`Unknown key_type: {$indicator.key_type} for indicator: {$value}`)\n                        }\n                    }\n                }\n                \n                if ($form and $value) {\n                    // Use Storm dict access pattern instead of .has() method\n                    if (not $validin_indicators.$form) {\n                        $validin_indicators.$form = ([])\n                    }\n                    $validin_indicators.$form.append($value)\n                    \n                }\n            }\n            \n            // Remove duplicates\n            for ($form, $values) in $validin_indicators {\n                $validin_indicators.$form = $values.unique()\n            }\n            \n            $total_indicators = 0\n            for ($form, $values) in $validin_indicators {\n                $total_indicators = ($total_indicators + $lib.len($values))\n            }\n        } else {\n            if ($lib.debug) {\n                if ($validin_data) {\n                    $lib.print(\"Validin API response received but no indicators field found\")\n                } else {\n                    $lib.print(\"No Validin API response received\")\n                }\n            }\n        }\n        \n        // Figure out what needs to be synced\n        $differences = $calculateSyncDifferences($synapse_indicators, $validin_indicators)\n        \n        // Execute the sync\n        $sync_results = ({\n            \"synapse_added\": 0,\n            \"validin_added\": 0,\n            \"draft_only\": ($sync_mode = \"draft\")\n        })\n        \n        switch $sync_mode {\n            \"draft\": {\n                // Just show what would happen without actually doing it\n                $to_add_synapse_count = 0\n                $to_add_validin_count = 0\n                \n                for ($form, $values) in $differences.to_add_synapse {\n                    $to_add_synapse_count = ($to_add_synapse_count + $lib.len($values))\n                }\n                for ($form, $values) in $differences.to_add_validin {\n                    $to_add_validin_count = ($to_add_validin_count + $lib.len($values))\n                }\n                \n                $lib.print(`Sync Status for project '{$project_name}':`)\n                $lib.print(`  Would add {$to_add_synapse_count} indicators to Synapse`)\n                $lib.print(`  Would add {$to_add_validin_count} indicators to Validin`)\n            }\n            \n            \"pull\": {\n                // Create Synapse nodes from Validin indicators (with project links)\n                $srcnode = $getMetaSource()\n                for ($form, $values) in $differences.to_add_synapse {\n                    for $value in $values {\n                        $result = $createIndicatorWithEdge($form, $value, $project_guid, $srcnode)\n                        if ($result) {\n                            $sync_results.synapse_added = ($sync_results.synapse_added + 1)\n                        }\n                    }\n                }\n                $debugPrint(\"Pull\", `Added {$sync_results.synapse_added} indicators to Synapse`)\n            }\n            \n            \"push\": {\n                // Send Synapse indicators to Validin via API\n                if ($lib.len($differences.to_add_validin) > 0) {\n                    $payload = $buildValidinPayload($differences.to_add_validin)\n                    \n                    $result = $api.addProjectIndicators($project_guid, $payload)\n                    if ($result) {\n                        $total_added = 0\n                        for ($form, $values) in $differences.to_add_validin {\n                            $total_added = ($total_added + $lib.len($values))\n                        }\n                        $sync_results.validin_added = $total_added\n                    }\n                }\n                $debugPrint(\"Push\", `Added {$sync_results.validin_added} indicators to Validin`)\n            }\n        }\n        \n        // Update last sync time\n        if ($sync_mode != \"draft\") {\n            $current_time = $lib.time.now()\n            yield $project_node\n            [ :_validin:last_sync=$current_time ]\n            \n            if ($lib.debug) {\n                $lib.print(`Updated last sync timestamp for project {$project_guid}`)\n            }\n        }\n        \n        return($sync_results)\n    } catch StormRuntimeError as err {\n        $lib.warn(`Failed to perform project sync: {$err}`)\n        return(({\n            \"synapse_added\": 0,\n            \"validin_added\": 0,\n            \"error\": $err\n        }))\n    }\n}"
     }
   ],
   "name": "ex-validin",
@@ -299,6 +576,56 @@
         ],
         "name": "host subdomains",
         "storm": "ex.validin.host.subdomains"
+      },
+      {
+        "descr": "Get domain registration information from Validin",
+        "forms": [
+          "inet:fqdn"
+        ],
+        "name": "whois",
+        "storm": "ex.validin.whois"
+      },
+      {
+        "descr": "Add this indicator to the active Validin project (use ex.validin.project.set to set active project)",
+        "forms": [
+          "inet:fqdn",
+          "inet:ipv4",
+          "inet:ipv6",
+          "hash:md5",
+          "hash:sha1",
+          "hash:sha256"
+        ],
+        "name": "add to active project",
+        "storm": "ex.validin.project.indicators.add $lib.globals.get(\"validin:active_project\")"
+      },
+      {
+        "descr": "Remove this indicator from the active Validin project",
+        "forms": [
+          "inet:fqdn",
+          "inet:ipv4",
+          "inet:ipv6",
+          "hash:md5",
+          "hash:sha1",
+          "hash:sha256"
+        ],
+        "name": "remove from active project",
+        "storm": "ex.validin.project.indicators.delete $lib.globals.get(\"validin:active_project\")"
+      },
+      {
+        "descr": "Set this project as your active Validin project for indicator operations",
+        "forms": [
+          "proj:project"
+        ],
+        "name": "set as active project",
+        "storm": "ex.validin.project.set --self"
+      },
+      {
+        "descr": "Sync indicators from this Validin project to Synapse",
+        "forms": [
+          "proj:project"
+        ],
+        "name": "get project indicators",
+        "storm": "ex.validin.project.indicators.get --yield"
       }
     ]
   },
@@ -319,5 +646,5 @@
     140,
     0
   ],
-  "version": "1.1.0"
+  "version": "1.2.0"
 }

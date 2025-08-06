@@ -1,0 +1,24 @@
+init {
+    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
+}
+
+$privsep.debugPrint("Set", `Starting set active project {$cmdopts.project_guid}`)
+
+$result = $privsep.setValidinActiveProject($cmdopts.project_guid, $cmdopts.self)
+
+if ($result) {
+    $scope = "globally"
+    if ($cmdopts.self) {
+        $scope = "for your user"
+    }
+    
+    proj:project=$cmdopts.project_guid {
+        $project_name = $node.props.get("name")
+        if ($project_name = $lib.null) {
+            $project_name = "Unknown"
+        }
+        $lib.print(`Successfully set active Validin project {$scope}: {$project_name} ({$cmdopts.project_guid})`)
+    }
+} else {
+    $lib.warn("Failed to set active project. Ensure the project exists in Synapse.")
+}

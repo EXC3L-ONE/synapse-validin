@@ -10,7 +10,7 @@ init {
     $key_status_ok = $privsep.setValidinAPIKey($cmdopts.apikey, $cmdopts.self)
 
     if ($key_status_ok) {
-        if ($lib.debug) {$lib.print("Validin API key set successfully")}
+        $privsep.debugPrint("Setup", "Validin API key set successfully")
     } else {
         $lib.warn("Failed setting the key for the Validin API. Check if the token you provided is valid.")
     }

@@ -1,0 +1,34 @@
+init {
+    $api = $lib.import(ex.validin.api, debug=$lib.debug)
+    $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
+}
+
+$api_key_set = $privsep.getValidinAPIKey()
+
+if ($api_key_set != $lib.false) {
+
+    $privsep.debugPrint("Sync", `Starting {$cmdopts.mode} mode sync`)
+
+    $project_list_data = $api.getProjectList()
+    if (not $project_list_data) {
+        $lib.warn("Failed to retrieve project list from Validin API")
+        return()
+    }
+
+    $privsep.parseProjectList($project_list_data)
+
+    for ($project_id, $project_info) in $project_list_data.projects {
+        proj:project=$project_id {
+            $privsep.performProjectSync($node, $cmdopts.mode)
+            
+            if ($cmdopts.yield) {
+                yield $node
+            }
+        }
+    }
+
+    $privsep.debugPrint("Sync", `Completed {$cmdopts.mode} mode sync`)
+
+} else {
+    $lib.exit("Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first")
+}

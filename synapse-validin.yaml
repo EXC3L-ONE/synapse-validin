@@ -1,5 +1,5 @@
 name: ex-validin
-version: 1.1.0
+version: 1.2.0
 synapse_minversion: [2, 140, 0]
 desc: The ex-validin package provides an interface to the Validin API allowing for enrichment of `inet:ipv4` and `inet:fqdn` nodes.
 
@@ -177,7 +177,7 @@ commands:
           help: Show verbose debug output.
 
   - name: ex.validin.project.indicators.get
-    descr: Retrieves indicators for a Validin project and creates appropriate nodes
+    descr: Retrieves and syncs indicators from Validin projects to Synapse
     perms:
       - [ex, validin, user]
     cmdargs:
@@ -185,12 +185,12 @@ commands:
         - type: bool
           default: false
           action: store_true
-          help: Yield the newly created nodes rather than the input proj:project nodes.
+          help: Yield the newly created indicator nodes rather than the input proj:project nodes.
       - - --all
         - type: bool
           default: false
           action: store_true
-          help: Sync all validin proj:project nodes instead of requiring input nodes.
+          help: Process all Validin proj:project nodes instead of requiring input nodes.
       - - --debug
         - type: bool
           default: false
@@ -201,13 +201,13 @@ commands:
         - proj:project
 
   - name: ex.validin.project.indicators.add
-    descr: Adds indicators to a Validin project
+    descr: Adds indicators to a Validin project and creates project links in Synapse
     perms:
       - [ex, validin, user]
     cmdargs:
       - - project_guid
         - type: str
-          help: The project GUID to add indicators to
+          help: The Validin project GUID to add indicators to
       - - --debug
         - type: bool
           default: false
@@ -223,13 +223,13 @@ commands:
         - hash:sha256
 
   - name: ex.validin.project.indicators.delete
-    descr: Deletes indicators from a Validin project
+    descr: Removes indicators from a Validin project and cleans up project links in Synapse
     perms:
       - [ex, validin, user]
     cmdargs:
       - - project_guid
         - type: str
-          help: The project GUID to delete indicators from
+          help: The Validin project GUID to remove indicators from
       - - --debug
         - type: bool
           default: false
@@ -243,6 +243,45 @@ commands:
         - hash:md5
         - hash:sha1
         - hash:sha256
+
+  - name: ex.validin.project.set
+    descr: Sets the active Validin project for indicator management operations
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - project_guid
+        - type: str
+          help: The Validin project GUID to set as active
+      - - --self
+        - type: bool
+          default: false
+          action: store_true
+          help: Set the project as a user variable. If not used, the project is set globally.
+    forms:
+      inputs:
+        - proj:project
+
+
+  - name: ex.validin.project.sync
+    descr: Synchronizes all Validin projects with Synapse using additive-only operations (designed for CLI/cron usage)
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - --mode
+        - type: str
+          default: pull
+          choices: [pull, push, draft]
+          help: "Sync mode: pull (Validin->Synapse, default), push (Synapse->Validin), draft (dry-run preview). Use separate cron jobs for bidirectional sync."
+      - - --yield
+        - type: bool
+          default: false
+          action: store_true
+          help: Yield the proj:project nodes.
+      - - --debug
+        - type: bool
+          default: false
+          action: store_true
+          help: Show verbose debug output.
 
 optic:
     actions:
@@ -266,3 +305,19 @@ optic:
         storm: ex.validin.whois
         descr: Get domain registration information from Validin
         forms: [ inet:fqdn ]
+      - name: add to active project
+        storm: 'ex.validin.project.indicators.add $lib.globals.get("validin:active_project")'
+        descr: Add this indicator to the active Validin project (use ex.validin.project.set to set active project)
+        forms: [ inet:fqdn, inet:ipv4, inet:ipv6, hash:md5, hash:sha1, hash:sha256 ]
+      - name: remove from active project  
+        storm: 'ex.validin.project.indicators.delete $lib.globals.get("validin:active_project")'
+        descr: Remove this indicator from the active Validin project
+        forms: [ inet:fqdn, inet:ipv4, inet:ipv6, hash:md5, hash:sha1, hash:sha256 ]
+      - name: set as active project
+        storm: ex.validin.project.set --self
+        descr: Set this project as your active Validin project for indicator operations
+        forms: [ proj:project ]
+      - name: get project indicators
+        storm: ex.validin.project.indicators.get --yield
+        descr: Sync indicators from this Validin project to Synapse
+        forms: [ proj:project ]

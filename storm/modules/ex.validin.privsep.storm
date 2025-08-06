@@ -3,6 +3,29 @@ function getMetaSource() {
     return($node)
 }
 
+function debugPrint(operation_type, details) {
+    /*
+    Simple debug helper for consistent logging format
+    */
+    if $lib.debug {
+        $lib.print(`{$operation_type}: {$details}`)
+    }
+}
+
+function manageProjectEdge(action, project_guid, node) {
+    /*
+    Minimal edge management for project relationships
+    */
+    switch $action {
+        "add": {
+            [ <(refs)+ { proj:project=$project_guid } ]
+        }
+        "remove": {
+            [ <(refs)- { proj:project=$project_guid } ]
+        }
+    }
+}
+
 function getValidinAPIKey() {
     // see if the user has their own key set
     $apikey = $lib.user.vars.get("validin:apikey")
@@ -17,6 +40,42 @@ function getValidinAPIKey() {
     }
  
     return($lib.false)
+}
+
+function getValidinActiveProject() {
+    // see if the user has their own active project set
+    $project_guid = $lib.user.vars.get("validin:active_project")
+    if ($project_guid) {
+        return($project_guid)
+    }
+
+    // no user project, check for global
+    $project_guid = $lib.globals.get("validin:active_project")
+    if ($project_guid) {
+        return($project_guid)
+    }
+ 
+    return($lib.false)
+}
+
+function setValidinActiveProject(guid, self) {
+    // Validate the project GUID exists in our system first
+    $project_exists = $lib.false
+    proj:project=$guid {
+        $project_exists = $lib.true
+    }
+    
+    if (not $project_exists) {
+        $lib.warn(`Project GUID {$guid} not found in Synapse. Run 'ex.validin.project.list' first to sync projects.`)
+        return($lib.false)
+    }
+    
+    if ($self) {
+        $lib.user.vars.set("validin:active_project", $guid)
+    } else {
+        $lib.globals.set("validin:active_project", $guid)
+    }
+    return($lib.true)
 }
 
 function setValidinExtendedProps() {
@@ -61,6 +120,11 @@ function setValidinExtendedProps() {
     if (not $validin_proj_prop_list.has('_validin:guid')) {
         $propinfo = ({'doc': 'The Validin project GUID'})
         $lib.model.ext.addFormProp(proj:project, _validin:guid, (str, ({})), $propinfo)
+    }
+
+    if (not $validin_proj_prop_list.has('_validin:last_sync')) {
+        $propinfo = ({'doc': 'The timestamp of the last sync operation with Validin'})
+        $lib.model.ext.addFormProp(proj:project, _validin:last_sync, (time, ({})), $propinfo)
     }
 }
 
@@ -122,17 +186,37 @@ function makeValidinAPIRequest(api_endpoint, method="GET", post_data=$lib.null) 
 
     // Handle GET vs POST requests
     if ($method = "POST") {
-        $resp = $lib.inet.http.post($url, headers=({"Authorization": $getValidinAPIKey(), "Content-Type": "application/json"}), json=$post_data, ssl_verify=$lib.false)
+        $resp = $lib.inet.http.post($url, headers=({"Authorization": $getValidinAPIKey(), "Content-Type": "application/json"}), json=$post_data)
     } else {
-        $resp = $lib.inet.http.get($url, headers=({"Authorization": $getValidinAPIKey()}), ssl_verify=$lib.false)
+        $resp = $lib.inet.http.get($url, headers=({"Authorization": $getValidinAPIKey()}))
     }
 
     if ($resp.code != 200) { 
         $lib.warn(`Validin API {$method} request failed with code {$resp.code}`)
+        if $lib.debug {
+            $lib.print(`Response body: {$resp.body}`)
+        }
         return($lib.null) 
     }
 
     $json = $resp.body.json()
+    
+    if $lib.debug {
+        $lib.print(`API Response Code: {$resp.code}`)
+        if ($json) {
+            $lib.print("Processing API response data")
+            if ($json.indicators) {
+                $lib.print(`Indicators found: {$lib.len($json.indicators)}`)
+                if ($lib.len($json.indicators) > 0) {
+                    $lib.print(`First indicator: {$json.indicators.0}`)
+                }
+            } else {
+                $lib.print("No 'indicators' key in response")
+            }
+        } else {
+            $lib.print("API response is null/empty")
+        }
+    }
 
     return($json)
 }
@@ -396,4 +480,434 @@ function parseProjectIndicators(data, project_guid) {
     
     | uniq |
     [<(seen)+ { yield $srcnode }]
+}
+
+function createIndicatorWithEdge(indicator_form, indicator_value, project_guid, srcnode) {
+    /*
+    Creates an indicator node and links it to the project
+    */
+    try {
+        $current_time = $lib.time.now()
+        
+        switch $indicator_form {
+            "inet:fqdn": { 
+                ($ok, $norm) = $lib.trycast(inet:fqdn, $indicator_value)
+                if ($ok) {
+                    [ inet:fqdn=$norm .seen=$current_time 
+                      <(seen)+ { yield $srcnode } 
+                      <(refs)+ { proj:project=$project_guid } ]
+                    return($norm)
+                }
+            }
+            "inet:ipv4": { 
+                ($ok, $norm) = $lib.trycast(inet:ipv4, $indicator_value)
+                if ($ok) {
+                    [ inet:ipv4=$norm .seen=$current_time 
+                      <(seen)+ { yield $srcnode } 
+                      <(refs)+ { proj:project=$project_guid } ]
+                    return($norm)
+                }
+            }
+            "inet:ipv6": { 
+                ($ok, $norm) = $lib.trycast(inet:ipv6, $indicator_value)
+                if ($ok) {
+                    [ inet:ipv6=$norm .seen=$current_time 
+                      <(seen)+ { yield $srcnode } 
+                      <(refs)+ { proj:project=$project_guid } ]
+                    return($norm)
+                }
+            }
+            "hash:md5": { 
+                ($ok, $norm) = $lib.trycast(hash:md5, $indicator_value)
+                if ($ok) {
+                    [ hash:md5=$norm .seen=$current_time 
+                      <(seen)+ { yield $srcnode } 
+                      <(refs)+ { proj:project=$project_guid } ]
+                    return($norm)
+                }
+            }
+            "hash:sha1": { 
+                ($ok, $norm) = $lib.trycast(hash:sha1, $indicator_value)
+                if ($ok) {
+                    [ hash:sha1=$norm .seen=$current_time 
+                      <(seen)+ { yield $srcnode } 
+                      <(refs)+ { proj:project=$project_guid } ]
+                    return($norm)
+                }
+            }
+            "hash:sha256": { 
+                ($ok, $norm) = $lib.trycast(hash:sha256, $indicator_value)
+                if ($ok) {
+                    [ hash:sha256=$norm .seen=$current_time 
+                      <(seen)+ { yield $srcnode } 
+                      <(refs)+ { proj:project=$project_guid } ]
+                    return($norm)
+                }
+            }
+        }
+        
+        if ($lib.debug) {
+            $lib.warn(`Failed to normalize or create {$indicator_form}={$indicator_value}`)
+        }
+        return($lib.null)
+    } catch StormRuntimeError as err {
+        $lib.warn(`Failed to create indicator: {$err}`)
+        return($lib.null)
+    }
+}
+
+function createProjectIndicator(project_guid, indicator_form, indicator_value) {
+    try {
+        if ($lib.debug) {
+            $lib.print(`Creating indicator {$indicator_form}={$indicator_value} for project {$project_guid}`)
+        }
+        
+        // Ensure the project exists (critical for edge creation)
+        [ proj:project=$project_guid ]
+        
+        $srcnode = $getMetaSource()
+        $result = $createIndicatorWithEdge($indicator_form, $indicator_value, $project_guid, $srcnode)
+        
+        if ($result) {
+            if ($lib.debug) {
+                $lib.print(`Successfully created {$indicator_form}={$result} with project edge`)
+            }
+            return($lib.true)
+        } else {
+            return($lib.false)
+        }
+    } catch StormRuntimeError as err {
+        $lib.warn(`Failed to create indicator and project edge: {$err}`)
+        return($lib.false)
+    }
+}
+
+function gatherSynapseIndicators(project_node) {
+    /*
+    Collects all indicators linked to a project in Synapse
+    */
+    try {
+        $indicators = ({})
+        $project_guid = $project_node.props.get("_validin:guid")
+        
+        
+        // Walk through all indicators linked to this project
+        proj:project=$project_guid -(refs)> * {
+            $form = $node.form()
+            $value = $node.repr()
+            
+            // Group by indicator type
+            if (not $indicators.$form) {
+                $indicators.$form = ([])
+            }
+            $indicators.$form.append($value)
+            
+        }
+        
+        // Remove duplicates
+        for ($form, $values) in $indicators {
+            $indicators.$form = $values.unique()
+        }
+        
+        $total_count = 0
+        for ($form, $values) in $indicators {
+            $total_count = ($total_count + $lib.len($values))
+        }
+        $debugPrint("Gather", `Found {$total_count} indicators in Synapse`)
+        
+        return($indicators)
+    } catch StormRuntimeError as err {
+        $lib.warn(`Failed to gather Synapse indicators: {$err}`)
+        return(({}) /* Return empty dict on error */)
+    }
+}
+
+function buildValidinPayload(indicator_differences) {
+    /*
+    Converts indicators to Validin API format
+    */
+    $payload = ({
+        "types": ({
+            "dom": ([]),
+            "ip": ([]),
+            "hash": ([]),
+            "raw": ([])
+        })
+    })
+    
+    for ($form, $values) in $indicator_differences {
+        switch $form {
+            "inet:fqdn": { 
+                for $value in $values {
+                    $payload.types.dom.append($value)
+                }
+            }
+            ("inet:ipv4", "inet:ipv6"): { 
+                for $value in $values {
+                    $payload.types.ip.append($value)
+                }
+            }
+            ("hash:md5", "hash:sha1", "hash:sha256"): { 
+                for $value in $values {
+                    $payload.types.hash.append($value)
+                }
+            }
+        }
+    }
+    
+    return($payload)
+}
+
+function calculateSyncDifferences(synapse_indicators, validin_indicators) {
+    /*
+    Figures out what indicators need to be synced between systems
+    */
+    try {
+        $differences = ({
+            "to_add_validin": ({}),
+            "to_add_synapse": ({})
+        })
+        
+        
+        // Get all indicator types from both systems
+        $all_forms = ([])
+        if ($synapse_indicators != $lib.null and $lib.len($synapse_indicators) > 0) {
+            for ($form, $values) in $synapse_indicators {
+                $all_forms.append($form)
+            }
+        }
+        if ($validin_indicators != $lib.null and $lib.len($validin_indicators) > 0) {
+            for ($form, $values) in $validin_indicators {
+                $all_forms.append($form)
+            }
+        }
+        $all_forms = $all_forms.unique()
+        
+        // Compare each indicator type
+        for $form in $all_forms {
+            $synapse_values = ([])
+            if ($synapse_indicators != $lib.null and $synapse_indicators.$form) {
+                $synapse_values = $synapse_indicators.$form
+            }
+            
+            $validin_values = ([])
+            if ($validin_indicators != $lib.null and $validin_indicators.$form) {
+                $validin_values = $validin_indicators.$form
+            }
+            
+            // Find what's missing on each side
+            $to_validin = ([])
+            $to_synapse = ([])
+            
+            // Find indicators that exist in Synapse but not Validin
+            for $synapse_item in $synapse_values {
+                if (not $validin_values.has($synapse_item)) {
+                    $to_validin.append($synapse_item)
+                }
+            }
+            
+            // Find indicators that exist in Validin but not Synapse
+            for $validin_item in $validin_values {
+                if (not $synapse_values.has($validin_item)) {
+                    $to_synapse.append($validin_item)
+                }
+            }
+            
+            // Only track types that actually have differences
+            if ($lib.len($to_validin) > 0) {
+                $differences.to_add_validin.$form = $to_validin
+            }
+            if ($lib.len($to_synapse) > 0) {
+                $differences.to_add_synapse.$form = $to_synapse
+            }
+            
+            if ($lib.debug) {
+                $lib.print(`Form {$form}: {$lib.len($to_validin)} to add to Validin, {$lib.len($to_synapse)} to add to Synapse`)
+            }
+        }
+        
+        return($differences)
+    } catch StormRuntimeError as err {
+        $lib.warn(`Failed to calculate sync differences: {$err}`)
+        return(({
+            "to_add_validin": ({}),
+            "to_add_synapse": ({})
+        }))
+    }
+}
+
+function performProjectSync(project_node, sync_mode) {
+    /*
+    Syncs indicators between Synapse and Validin projects (additive only - never deletes)
+    
+    Modes: "pull" (Validin -> Synapse), "push" (Synapse -> Validin), "draft" (dry-run)
+    Use separate cron jobs for pull and push to get bidirectional sync
+    */
+    try {
+        $project_guid = $project_node.props.get("_validin:guid")
+        $project_name = $project_node.props.get("name")
+        if ($project_name = $lib.null) {
+            $project_name = "Unknown"
+        }
+        
+        $debugPrint("Sync", `Starting {$sync_mode} for '{$project_name}'`)
+        
+        // Get current indicators from both systems
+        $synapse_indicators = $gatherSynapseIndicators($project_node)
+        
+        $api = $lib.import(ex.validin.api, debug=$lib.debug)
+        $validin_data = $api.getProjectIndicators($project_guid)
+        
+        // Process Validin API response into same format as Synapse data
+        $validin_indicators = ({})
+        if ($validin_data and $validin_data.indicators) {
+            
+            for $indicator in $validin_data.indicators {
+                $form = $lib.null
+                $value = $indicator.key  // Use 'key' not 'value'
+                
+                // Convert Validin types to Synapse forms
+                switch $indicator.key_type {
+                    "dom": { 
+                        $form = "inet:fqdn"
+                    }
+                    "ip4": { 
+                        $form = "inet:ipv4"
+                    }
+                    "ip6": { 
+                        $form = "inet:ipv6"
+                    }
+                    "hash": { 
+                        // Try each hash type with trycast for proper validation
+                        ($ok, $norm) = $lib.trycast("hash:md5", $value)
+                        if $ok { 
+                            $form = "hash:md5" 
+                        } else {
+                            ($ok, $norm) = $lib.trycast("hash:sha1", $value) 
+                            if $ok { 
+                                $form = "hash:sha1" 
+                            } else {
+                                ($ok, $norm) = $lib.trycast("hash:sha256", $value)
+                                if $ok { 
+                                    $form = "hash:sha256" 
+                                }
+                            }
+                        }
+                    }
+                    *: {
+                        if ($lib.debug) {
+                            $lib.warn(`Unknown key_type: {$indicator.key_type} for indicator: {$value}`)
+                        }
+                    }
+                }
+                
+                if ($form and $value) {
+                    // Use Storm dict access pattern instead of .has() method
+                    if (not $validin_indicators.$form) {
+                        $validin_indicators.$form = ([])
+                    }
+                    $validin_indicators.$form.append($value)
+                    
+                }
+            }
+            
+            // Remove duplicates
+            for ($form, $values) in $validin_indicators {
+                $validin_indicators.$form = $values.unique()
+            }
+            
+            $total_indicators = 0
+            for ($form, $values) in $validin_indicators {
+                $total_indicators = ($total_indicators + $lib.len($values))
+            }
+        } else {
+            if ($lib.debug) {
+                if ($validin_data) {
+                    $lib.print("Validin API response received but no indicators field found")
+                } else {
+                    $lib.print("No Validin API response received")
+                }
+            }
+        }
+        
+        // Figure out what needs to be synced
+        $differences = $calculateSyncDifferences($synapse_indicators, $validin_indicators)
+        
+        // Execute the sync
+        $sync_results = ({
+            "synapse_added": 0,
+            "validin_added": 0,
+            "draft_only": ($sync_mode = "draft")
+        })
+        
+        switch $sync_mode {
+            "draft": {
+                // Just show what would happen without actually doing it
+                $to_add_synapse_count = 0
+                $to_add_validin_count = 0
+                
+                for ($form, $values) in $differences.to_add_synapse {
+                    $to_add_synapse_count = ($to_add_synapse_count + $lib.len($values))
+                }
+                for ($form, $values) in $differences.to_add_validin {
+                    $to_add_validin_count = ($to_add_validin_count + $lib.len($values))
+                }
+                
+                $lib.print(`Sync Status for project '{$project_name}':`)
+                $lib.print(`  Would add {$to_add_synapse_count} indicators to Synapse`)
+                $lib.print(`  Would add {$to_add_validin_count} indicators to Validin`)
+            }
+            
+            "pull": {
+                // Create Synapse nodes from Validin indicators (with project links)
+                $srcnode = $getMetaSource()
+                for ($form, $values) in $differences.to_add_synapse {
+                    for $value in $values {
+                        $result = $createIndicatorWithEdge($form, $value, $project_guid, $srcnode)
+                        if ($result) {
+                            $sync_results.synapse_added = ($sync_results.synapse_added + 1)
+                        }
+                    }
+                }
+                $debugPrint("Pull", `Added {$sync_results.synapse_added} indicators to Synapse`)
+            }
+            
+            "push": {
+                // Send Synapse indicators to Validin via API
+                if ($lib.len($differences.to_add_validin) > 0) {
+                    $payload = $buildValidinPayload($differences.to_add_validin)
+                    
+                    $result = $api.addProjectIndicators($project_guid, $payload)
+                    if ($result) {
+                        $total_added = 0
+                        for ($form, $values) in $differences.to_add_validin {
+                            $total_added = ($total_added + $lib.len($values))
+                        }
+                        $sync_results.validin_added = $total_added
+                    }
+                }
+                $debugPrint("Push", `Added {$sync_results.validin_added} indicators to Validin`)
+            }
+        }
+        
+        // Update last sync time
+        if ($sync_mode != "draft") {
+            $current_time = $lib.time.now()
+            yield $project_node
+            [ :_validin:last_sync=$current_time ]
+            
+            if ($lib.debug) {
+                $lib.print(`Updated last sync timestamp for project {$project_guid}`)
+            }
+        }
+        
+        return($sync_results)
+    } catch StormRuntimeError as err {
+        $lib.warn(`Failed to perform project sync: {$err}`)
+        return(({
+            "synapse_added": 0,
+            "validin_added": 0,
+            "error": $err
+        }))
+    }
 }

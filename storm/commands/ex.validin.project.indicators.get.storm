@@ -9,13 +9,16 @@ if ($api_key_set != $lib.false) {
     $project_guid = $node.repr()
     $validin_guid = $node.props.get("_validin:guid")
     
-    if ($lib.debug) {
-        $lib.print(`Getting indicators for project: {$validin_guid}`)
-    }
+    $privsep.debugPrint("Get", `Starting get indicators for {$validin_guid}`)
     
     $indicator_data = $api.getProjectIndicators($validin_guid)
     if ($indicator_data) {
-        divert $cmdopts.yield $privsep.parseProjectIndicators($indicator_data, $project_guid)
+        if ($cmdopts.yield) {
+            yield $privsep.parseProjectIndicators($indicator_data, $project_guid)
+        } else {
+            $privsep.parseProjectIndicators($indicator_data, $project_guid)
+        }
+        $privsep.debugPrint("Get", `Successfully retrieved indicators`)
     } else {
         $lib.warn(`Failed to retrieve indicators for project: {$validin_guid}`)
     }

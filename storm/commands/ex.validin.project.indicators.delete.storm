@@ -7,6 +7,8 @@ $api_key_set = $privsep.getValidinAPIKey()
 
 if ($api_key_set != $lib.false) {
 
+    $project_guid = $cmdopts.project_guid
+
     // Initialize payload structure
     $payload = ({
         "types": ({
@@ -35,15 +37,12 @@ if ($api_key_set != $lib.false) {
         }
     }
     
-    if ($lib.debug) {
-        $lib.print(`Deleting {$node.form()}={$indicator_value} from project {$cmdopts.project_guid}`)
-    }
+    $privsep.debugPrint("Delete", `Starting delete {$node.form()}={$indicator_value}`)
     
-    $result = $api.deleteProjectIndicators($cmdopts.project_guid, $payload)
+    $result = $api.deleteProjectIndicators($project_guid, $payload)
     if ($result) {
-        // Also remove the light edge in Synapse to keep proj:project in sync
-        [ <(refs)- { proj:project } ]
-        $lib.print(`Successfully deleted {$node.form()}={$indicator_value} from project and removed Synapse edge`)
+        $privsep.manageProjectEdge("remove", $project_guid, $node)
+        $privsep.debugPrint("Delete", `Successfully deleted {$node.form()}={$indicator_value}`)
     } else {
         $lib.warn(`Failed to delete indicator from project`)
     }
