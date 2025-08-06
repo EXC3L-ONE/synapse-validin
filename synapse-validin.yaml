@@ -306,15 +306,15 @@ optic:
         descr: Get domain registration information from Validin
         forms: [ inet:fqdn ]
       - name: add to active project
-        storm: 'ex.validin.project.indicators.add $lib.globals.get("validin:active_project")'
+        storm: 'ex.validin.project.indicators.add $lib.user.vars.get("validin:active_project")'
         descr: Add this indicator to the active Validin project (use ex.validin.project.set to set active project)
         forms: [ inet:fqdn, inet:ipv4, inet:ipv6, hash:md5, hash:sha1, hash:sha256 ]
       - name: remove from active project  
-        storm: 'ex.validin.project.indicators.delete $lib.globals.get("validin:active_project")'
+        storm: 'ex.validin.project.indicators.delete $lib.user.vars.get("validin:active_project")'
         descr: Remove this indicator from the active Validin project
         forms: [ inet:fqdn, inet:ipv4, inet:ipv6, hash:md5, hash:sha1, hash:sha256 ]
       - name: set as active project
-        storm: ex.validin.project.set --self
+        storm: ex.validin.project.set :_validin:guid --self
         descr: Set this project as your active Validin project for indicator operations
         forms: [ proj:project ]
       - name: get project indicators

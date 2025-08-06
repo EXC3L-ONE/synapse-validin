@@ -12,19 +12,6 @@ function debugPrint(operation_type, details) {
     }
 }
 
-function manageProjectEdge(action, project_guid, node) {
-    /*
-    Minimal edge management for project relationships
-    */
-    switch $action {
-        "add": {
-            [ <(refs)+ { proj:project=$project_guid } ]
-        }
-        "remove": {
-            [ <(refs)- { proj:project=$project_guid } ]
-        }
-    }
-}
 
 function getValidinAPIKey() {
     // see if the user has their own key set
@@ -430,9 +417,6 @@ function parseProjectList(data) {
 
 function parseProjectIndicators(data, project_guid) {
     $srcnode = $getMetaSource()
-    
-    // First ensure the project exists
-    [ proj:project=$project_guid ]
     
     for $indicator in $data.indicators {
         $indicator_key = $indicator.key
@@ -859,16 +843,15 @@ function performProjectSync(project_node, sync_mode) {
             }
             
             "pull": {
-                // Create Synapse nodes from Validin indicators (with project links)
-                $srcnode = $getMetaSource()
+                // Create Synapse nodes from Validin indicators (with project links) - batch processing
+                $parseProjectIndicators($validin_data, $project_guid)
+                
+                // Calculate how many were actually new (approximate from differences)
+                $total_new = 0
                 for ($form, $values) in $differences.to_add_synapse {
-                    for $value in $values {
-                        $result = $createIndicatorWithEdge($form, $value, $project_guid, $srcnode)
-                        if ($result) {
-                            $sync_results.synapse_added = ($sync_results.synapse_added + 1)
-                        }
-                    }
+                    $total_new = ($total_new + $lib.len($values))
                 }
+                $sync_results.synapse_added = $total_new
                 $debugPrint("Pull", `Added {$sync_results.synapse_added} indicators to Synapse`)
             }
             

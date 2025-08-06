@@ -41,7 +41,7 @@ if ($api_key_set != $lib.false) {
     
     $result = $api.deleteProjectIndicators($project_guid, $payload)
     if ($result) {
-        $privsep.manageProjectEdge("remove", $project_guid, $node)
+        [ <(refs)- { proj:project=$project_guid } ]
         $privsep.debugPrint("Delete", `Successfully deleted {$node.form()}={$indicator_value}`)
     } else {
         $lib.warn(`Failed to delete indicator from project`)

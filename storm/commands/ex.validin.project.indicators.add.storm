@@ -41,7 +41,7 @@ if ($api_key_set != $lib.false) {
     
     $result = $api.addProjectIndicators($project_guid, $payload)
     if ($result) {
-        $privsep.manageProjectEdge("add", $project_guid, $node)
+        [ <(refs)+ { proj:project=$project_guid } ]
         $privsep.debugPrint("Add", `Successfully added {$node.form()}={$indicator_value}`)
     } else {
         $lib.warn(`Failed to add indicator to project`)
