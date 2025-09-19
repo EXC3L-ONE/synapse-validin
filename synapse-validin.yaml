@@ -1,5 +1,5 @@
 name: ex-validin
-version: 1.2.0
+version: 2.0.0
 synapse_minversion: [2, 140, 0]
 desc: The ex-validin package provides an interface to the Validin API allowing for enrichment of `inet:ipv4` and `inet:fqdn` nodes.
 
@@ -244,39 +244,42 @@ commands:
         - hash:sha1
         - hash:sha256
 
-  - name: ex.validin.project.set
-    descr: Sets the active Validin project for indicator management operations
+  - name: ex.validin.threat.group.indicators
+    descr: Retrieves reported indicators for a named threat group
     perms:
       - [ex, validin, user]
     cmdargs:
-      - - project_guid
+      - - threat_key
         - type: str
-          help: The Validin project GUID to set as active
-      - - --self
-        - type: bool
-          default: false
-          action: store_true
-          help: Set the project as a user variable. If not used, the project is set globally.
-    forms:
-      inputs:
-        - proj:project
-
-
-  - name: ex.validin.project.sync
-    descr: Synchronizes all Validin projects with Synapse using additive-only operations (designed for CLI/cron usage)
-    perms:
-      - [ex, validin, user]
-    cmdargs:
-      - - --mode
-        - type: str
-          default: pull
-          choices: [pull, push, draft]
-          help: "Sync mode: pull (Validin->Synapse, default), push (Synapse->Validin), draft (dry-run preview). Use separate cron jobs for bidirectional sync."
+          help: Key for the threat group
+      - - --limit
+        - type: int
+          default: 0
+          help: Maximum number of indicators to process (0 for unlimited).
       - - --yield
         - type: bool
           default: false
           action: store_true
-          help: Yield the proj:project nodes.
+          help: Yield the newly created nodes rather than the input nodes.
+      - - --debug
+        - type: bool
+          default: false
+          action: store_true
+          help: Show verbose debug output.
+
+  - name: ex.validin.domain.reputation
+    descr: Retrieves reputation information for a domain
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - domain
+        - type: str
+          help: Domain to get reputation for
+      - - --yield
+        - type: bool
+          default: false
+          action: store_true
+          help: Yield the newly created nodes rather than the input nodes.
       - - --debug
         - type: bool
           default: false
@@ -305,19 +308,7 @@ optic:
         storm: ex.validin.whois
         descr: Get domain registration information from Validin
         forms: [ inet:fqdn ]
-      - name: add to active project
-        storm: 'ex.validin.project.indicators.add $lib.user.vars.get("validin:active_project")'
-        descr: Add this indicator to the active Validin project (use ex.validin.project.set to set active project)
-        forms: [ inet:fqdn, inet:ipv4, inet:ipv6, hash:md5, hash:sha1, hash:sha256 ]
-      - name: remove from active project  
-        storm: 'ex.validin.project.indicators.delete $lib.user.vars.get("validin:active_project")'
-        descr: Remove this indicator from the active Validin project
-        forms: [ inet:fqdn, inet:ipv4, inet:ipv6, hash:md5, hash:sha1, hash:sha256 ]
-      - name: set as active project
-        storm: ex.validin.project.set :_validin:guid --self
-        descr: Set this project as your active Validin project for indicator operations
-        forms: [ proj:project ]
-      - name: get project indicators
-        storm: ex.validin.project.indicators.get --yield
-        descr: Sync indicators from this Validin project to Synapse
-        forms: [ proj:project ]
+      - name: domain reputation
+        storm: ex.validin.domain.reputation $node.repr()
+        descr: Get domain reputation scores and risk tags from Validin
+        forms: [ inet:fqdn ]

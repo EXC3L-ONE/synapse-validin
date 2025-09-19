@@ -1,3 +1,11 @@
+/*
+    Validin API abstraction layer.
+    
+    Provides clean function interfaces for Validin API endpoints while
+    delegating HTTP execution and authentication to the privileged layer.
+    URL encoding and parameter formatting handled here.
+*/
+
 $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
 
 function getProjectList() {
@@ -41,7 +49,7 @@ function getDomainSubdomains(entity) {
 }
 
 function getDomainCrawlHistory(entity) {
-    $api_url = $lib.str.concat("axon/ip/crawl/history/", $entity)
+    $api_url = $lib.str.concat("axon/domain/crawl/history/", $entity)
     return($privsep.makeValidinAPIRequest($api_url))
 }
 
@@ -57,5 +65,15 @@ function getAdvancedSearchResults(query) {
 
 function getDomainRegHistory(entity) {
     $api_url = $lib.str.concat("axon/domain/registration/history/", $entity)
+    return($privsep.makeValidinAPIRequest($api_url))
+}
+
+function getThreatGroupIndicators(threat_key) {
+    $api_url = $lib.str.concat("threat/group/", $threat_key, "/indicators")
+    return($privsep.makeValidinAPIRequest($api_url))
+}
+
+function getDomainReputation(domain) {
+    $api_url = $lib.str.concat("axon/domain/reputation/quick/", $domain)
     return($privsep.makeValidinAPIRequest($api_url))
 }

@@ -1,3 +1,10 @@
+/*
+    Validin privilege separation layer.
+    
+    Handles authentication, HTTP execution, and response parsing.
+    Creates Synapse nodes with proper relationships and meta source tagging.
+*/
+
 function getMetaSource() {
     [ meta:source=$lib.guid("validin", "ex", "powerup") :name="validin" ]
     return($node)
@@ -109,9 +116,20 @@ function setValidinExtendedProps() {
         $lib.model.ext.addFormProp(proj:project, _validin:guid, (str, ({})), $propinfo)
     }
 
-    if (not $validin_proj_prop_list.has('_validin:last_sync')) {
-        $propinfo = ({'doc': 'The timestamp of the last sync operation with Validin'})
-        $lib.model.ext.addFormProp(proj:project, _validin:last_sync, (time, ({})), $propinfo)
+    // Add extended properties for inet:fqdn reputation
+    $validin_fqdn_prop_list = ([])
+    for $prop in $existing_props {
+        if ($prop.0 = 'inet:fqdn') {
+            $validin_fqdn_prop_list.append($prop.1)
+        }
+    }
+
+    if (not $validin_fqdn_prop_list.has('_validin:reputation_score')) {
+        $propinfo = ({'doc': 'The Validin reputation score (0-10 scale)'})
+        $lib.model.ext.addFormProp(inet:fqdn, _validin:reputation_score, (float, ({'min': 0, 'max': 10})), $propinfo)
+    } if (not $validin_fqdn_prop_list.has('_validin:reputation_verdict')) {
+        $propinfo = ({'doc': 'The Validin reputation verdict (low_risk, suspicious, malicious)'})
+        $lib.model.ext.addFormProp(inet:fqdn, _validin:reputation_verdict, (str, ({})), $propinfo)
     }
 }
 
@@ -229,21 +247,39 @@ function parseCrawlResponse(data, create_query=$lib.false, query="") {
     for $crawl in $data.records.crawlr {
         if (not $crawl.value.error) {
 
+            // Parse HTTP headers from banner_full, filtering invalid entries
+            // Only process banners containing ": " to avoid malformed headers
             $banners = ([])
-            for $banner in $crawl.value.banner_full { if ($banner ~=": ") { $banners.append($banner.split(": ")) }}
+            for $banner in $crawl.value.banner_full { 
+                if ($banner ~= ": ") { 
+                    $banners.append($banner.split(": ")) 
+                }
+            }
 
-            if ($crawl.value.location) { $url = $crawl.value.location }
-            elif ($crawl.value.host and $crawl.value.port and $crawl.value.port != 80 and $crawl.value.port != 443) { $url = `{$crawl.value.scheme}://{$crawl.value.host}:{$crawl.value.port}` } 
-            elif ($crawl.value.host) { $url = `{$crawl.value.scheme}://{$crawl.value.host}` }
-            elif ($crawl.value.ip and $crawl.value.port and $crawl.value.port != 80 and $crawl.value.port != 443 ) { $url = `{$crawl.value.scheme}://{$crawl.value.ip}:{$crawl.value.port}` }
-            else { $url = `{$crawl.value.scheme}://{$crawl.value.ip}` }
+            // Simplified URL construction - prioritize location, then build from components
+            if ($crawl.value.location) { 
+                $url = $crawl.value.location 
+            } else {
+                $host = ($crawl.value.host or $crawl.value.ip)
+                $port = $crawl.value.port
+                // Only append port if non-standard
+                if ($port and $port != 80 and $port != 443) {
+                    $url = `{$crawl.value.scheme}://{$host}:{$port}`
+                } else {
+                    $url = `{$crawl.value.scheme}://{$host}`
+                }
+            }
 
+            // Create hierarchical graph: request -> flow -> ssl cert  
+            // Preserves temporal relationships and server associations
             [(inet:http:request=("validin", $crawl.key, $crawl.first_seen, $crawl.last_seen)
                 :url*unset=$url
                 :time*unset=$lib.time.fromunix($crawl.first_seen)
                 :server*unset=`tcp://{$crawl.value.ip}:{$crawl.value.port}`
                 :response:headers*unset=$banners
+                // Extract HTTP status from start_line format: "HTTP/1.1 200 OK"
                 :response:code*unset?=$lib.regex.search(" (\d{3}) ", $crawl.value.start_line).0
+                // Validin-specific enrichment properties
                 :_validin:body_hash*unset?=$crawl.value.body_hash
                 :_validin:favicon_hash*unset?=$crawl.value.favicon_hash
                 :_validin:class_0_hash*unset?=$crawl.value.class_0_hash
@@ -267,6 +303,7 @@ function parseCrawlResponse(data, create_query=$lib.false, query="") {
             }
         }
 
+        // Create JARM fingerprint samples when available
         if ($crawl.value.cert_details.jarm) {
             { [(inet:ssl:jarmsample=(`tcp://{$crawl.value.ip}:{$crawl.value.port}`, $crawl.value.cert_details.jarm) .seen=($crawl.first_seen, $crawl.last_seen) )] }
         }
@@ -301,45 +338,47 @@ function parseDomainPDNS(data) {
     $srcnode = $getMetaSource()
 
     tee {
+        // DNS record creation creates both endpoint nodes and linking records
+        // Each DNS record type has specific endpoint forms (FQDN+IPv4/IPv6/NS)
         for $dns_a in $data.records.A {
             $first = $lib.time.fromunix($dns_a.first_seen)
-            $last  = $lib.time.fromunix($dns_a.last_seen)
+            $last = $lib.time.fromunix($dns_a.last_seen)
             [ inet:dns:a=(
-                { [ inet:fqdn=$dns_a.key   .seen=($first,$last) ] },
+                { [ inet:fqdn=$dns_a.key .seen=($first,$last) ] },
                 { [ inet:ipv4=$dns_a.value .seen=($first,$last) ] }
             ) .seen=($first,$last) ]
         }
 
         for $dns_ns in $data.records.NS {
             $first = $lib.time.fromunix($dns_ns.first_seen)
-            $last  = $lib.time.fromunix($dns_ns.last_seen)
+            $last = $lib.time.fromunix($dns_ns.last_seen)
             [ inet:dns:ns=(
-                { [ inet:fqdn=$dns_ns.key   .seen=($first,$last) ] },
+                { [ inet:fqdn=$dns_ns.key .seen=($first,$last) ] },
                 { [ inet:fqdn=$dns_ns.value .seen=($first,$last) ] }
             ) .seen=($first,$last) ]
         }
 
         for $dns_aaaa in $data.records.AAAA {
             $first = $lib.time.fromunix($dns_aaaa.first_seen)
-            $last  = $lib.time.fromunix($dns_aaaa.last_seen)
+            $last = $lib.time.fromunix($dns_aaaa.last_seen)
             [ inet:dns:aaaa=(
-                { [ inet:fqdn=$dns_aaaa.key   .seen=($first,$last) ] },
+                { [ inet:fqdn=$dns_aaaa.key .seen=($first,$last) ] },
                 { [ inet:ipv6=$dns_aaaa.value .seen=($first,$last) ] }
             ) .seen=($first,$last) ]
         }
 
         for $dns_mx in $data.records.MX {
             $first = $lib.time.fromunix($dns_mx.first_seen)
-            $last  = $lib.time.fromunix($dns_mx.last_seen)
+            $last = $lib.time.fromunix($dns_mx.last_seen)
             [ inet:dns:mx=(
-                { [ inet:fqdn=$dns_mx.key   .seen=($first,$last) ] },
+                { [ inet:fqdn=$dns_mx.key .seen=($first,$last) ] },
                 { [ inet:fqdn=$dns_mx.value .seen=($first,$last) ] }
             ) .seen=($first,$last) ]
         }
 
         for $dns_txt in $data.records.TXT {
             $first = $lib.time.fromunix($dns_txt.first_seen)
-            $last  = $lib.time.fromunix($dns_txt.last_seen)
+            $last = $lib.time.fromunix($dns_txt.last_seen)
             [ inet:dns:txt=(
                 { [ inet:fqdn=$dns_txt.key .seen=($first,$last) ] },
                 $dns_txt.value
@@ -356,6 +395,7 @@ function parseIpPDNS(data) {
 
     $srcnode = $getMetaSource()
 
+    // For IP PDNS, key/value are swapped compared to domain PDNS
     for $dns_a in $data.records.A {
         $first = $lib.time.fromunix($dns_a.first_seen)
         $last = $lib.time.fromunix($dns_a.last_seen)
@@ -370,10 +410,44 @@ function parseIpPDNS(data) {
 
 }
 
+function selectBestTimestamp(reg) {
+    // Select the best timestamp for WHOIS record deduplication
+    // Priority order: changed > updated > expires > registered > date
+    
+    // Check for changed date first (most recent change indicator)
+    if ($reg.changed and $reg.changed.0) {
+        return($lib.time.parse($reg.changed.0, "%Y-%m-%dT%H:%M:%SZ"))
+    }
+    
+    // Fall back to updated date (modification timestamp)
+    if ($reg.updated and $reg.updated.0) {
+        return($lib.time.parse($reg.updated.0, "%Y-%m-%dT%H:%M:%SZ"))
+    }
+    
+    // Fall back to expires date (next best indicator of record state)
+    if ($reg.expires and $reg.expires.0) {
+        return($lib.time.parse($reg.expires.0, "%Y-%m-%dT%H:%M:%SZ"))
+    }
+    
+    // Fall back to registered/created date (original creation)
+    if ($reg.registered and $reg.registered.0) {
+        return($lib.time.parse($reg.registered.0, "%Y-%m-%dT%H:%M:%SZ"))
+    }
+    
+    // Final fallback to date field (current behavior)
+    if ($reg.date) {
+        return($lib.time.parse($reg.date, "%Y-%m-%d"))
+    }
+    
+    // Should not reach here, but return current time as last resort
+    return($lib.time.now())
+}
+
 function emitDomainRegHistory(data) {
     $srcnode = $getMetaSource()
     for $reg in $data.records.registration {
-        $asof = $lib.time.parse($reg.date, "%Y-%m-%d")
+        // Uses selectBestTimestamp to handle inconsistent WHOIS timestamp data
+        $asof = $selectBestTimestamp($reg)
         $created = $lib.time.parse($reg.registered.0, "%Y-%m-%dT%H:%M:%SZ")
         $expires = $lib.time.parse($reg.expires.0, "%Y-%m-%dT%H:%M:%SZ")
         $domain = $reg.domain
@@ -423,7 +497,8 @@ function parseProjectIndicators(data, project_guid) {
         $key_type = $indicator.key_type
         $added_time = $lib.time.fromunix($indicator.time)
         
-        // Try different forms based on key_type and validation
+        // Create indicator nodes and link to project via (refs) edges
+        // Validates form compatibility before node creation
         if ($key_type = "dom") {
             ($ok, $norm) = $lib.trycast(inet:fqdn, $indicator_key)
             if ($ok) {
@@ -461,436 +536,91 @@ function parseProjectIndicators(data, project_guid) {
             }
         }
     }
-    
+
     | uniq |
     [<(seen)+ { yield $srcnode }]
 }
 
-function createIndicatorWithEdge(indicator_form, indicator_value, project_guid, srcnode) {
-    /*
-    Creates an indicator node and links it to the project
-    */
-    try {
-        $current_time = $lib.time.now()
-        
-        switch $indicator_form {
-            "inet:fqdn": { 
-                ($ok, $norm) = $lib.trycast(inet:fqdn, $indicator_value)
-                if ($ok) {
-                    [ inet:fqdn=$norm .seen=$current_time 
-                      <(seen)+ { yield $srcnode } 
-                      <(refs)+ { proj:project=$project_guid } ]
-                    return($norm)
-                }
-            }
-            "inet:ipv4": { 
-                ($ok, $norm) = $lib.trycast(inet:ipv4, $indicator_value)
-                if ($ok) {
-                    [ inet:ipv4=$norm .seen=$current_time 
-                      <(seen)+ { yield $srcnode } 
-                      <(refs)+ { proj:project=$project_guid } ]
-                    return($norm)
-                }
-            }
-            "inet:ipv6": { 
-                ($ok, $norm) = $lib.trycast(inet:ipv6, $indicator_value)
-                if ($ok) {
-                    [ inet:ipv6=$norm .seen=$current_time 
-                      <(seen)+ { yield $srcnode } 
-                      <(refs)+ { proj:project=$project_guid } ]
-                    return($norm)
-                }
-            }
-            "hash:md5": { 
-                ($ok, $norm) = $lib.trycast(hash:md5, $indicator_value)
-                if ($ok) {
-                    [ hash:md5=$norm .seen=$current_time 
-                      <(seen)+ { yield $srcnode } 
-                      <(refs)+ { proj:project=$project_guid } ]
-                    return($norm)
-                }
-            }
-            "hash:sha1": { 
-                ($ok, $norm) = $lib.trycast(hash:sha1, $indicator_value)
-                if ($ok) {
-                    [ hash:sha1=$norm .seen=$current_time 
-                      <(seen)+ { yield $srcnode } 
-                      <(refs)+ { proj:project=$project_guid } ]
-                    return($norm)
-                }
-            }
-            "hash:sha256": { 
-                ($ok, $norm) = $lib.trycast(hash:sha256, $indicator_value)
-                if ($ok) {
-                    [ hash:sha256=$norm .seen=$current_time 
-                      <(seen)+ { yield $srcnode } 
-                      <(refs)+ { proj:project=$project_guid } ]
-                    return($norm)
-                }
-            }
-        }
-        
-        if ($lib.debug) {
-            $lib.warn(`Failed to normalize or create {$indicator_form}={$indicator_value}`)
-        }
-        return($lib.null)
-    } catch StormRuntimeError as err {
-        $lib.warn(`Failed to create indicator: {$err}`)
-        return($lib.null)
-    }
-}
+function parseThreatGroupIndicators(data, threat_key, limit=0) {
+    $srcnode = $getMetaSource()
+    $tagPrefix = $getTagPrefix()
+    $count = 0
 
-function createProjectIndicator(project_guid, indicator_form, indicator_value) {
-    try {
-        if ($lib.debug) {
-            $lib.print(`Creating indicator {$indicator_form}={$indicator_value} for project {$project_guid}`)
-        }
-        
-        // Ensure the project exists (critical for edge creation)
-        [ proj:project=$project_guid ]
-        
-        $srcnode = $getMetaSource()
-        $result = $createIndicatorWithEdge($indicator_form, $indicator_value, $project_guid, $srcnode)
-        
-        if ($result) {
+    for $indicator in $data.indicators {
+        // Check limit if specified
+        if ($limit and $count >= $limit) {
             if ($lib.debug) {
-                $lib.print(`Successfully created {$indicator_form}={$result} with project edge`)
+                $lib.print(`Reached limit of {$limit} indicators, stopping processing`)
             }
-            return($lib.true)
-        } else {
-            return($lib.false)
+            break
         }
-    } catch StormRuntimeError as err {
-        $lib.warn(`Failed to create indicator and project edge: {$err}`)
-        return($lib.false)
-    }
-}
 
-function gatherSynapseIndicators(project_node) {
-    /*
-    Collects all indicators linked to a project in Synapse
-    */
-    try {
-        $indicators = ({})
-        $project_guid = $project_node.props.get("_validin:guid")
-        
-        
-        // Walk through all indicators linked to this project
-        proj:project=$project_guid -(refs)> * {
-            $form = $node.form()
-            $value = $node.repr()
-            
-            // Group by indicator type
-            if (not $indicators.$form) {
-                $indicators.$form = ([])
-            }
-            $indicators.$form.append($value)
-            
-        }
-        
-        // Remove duplicates
-        for ($form, $values) in $indicators {
-            $indicators.$form = $values.unique()
-        }
-        
-        $total_count = 0
-        for ($form, $values) in $indicators {
-            $total_count = ($total_count + $lib.len($values))
-        }
-        $debugPrint("Gather", `Found {$total_count} indicators in Synapse`)
-        
-        return($indicators)
-    } catch StormRuntimeError as err {
-        $lib.warn(`Failed to gather Synapse indicators: {$err}`)
-        return(({}) /* Return empty dict on error */)
-    }
-}
+        $indicator_key = $indicator.key
+        $key_type = $indicator.key_type
+        $added_time = $lib.time.fromunix($indicator.date_added)
 
-function buildValidinPayload(indicator_differences) {
-    /*
-    Converts indicators to Validin API format
-    */
-    $payload = ({
-        "types": ({
-            "dom": ([]),
-            "ip": ([]),
-            "hash": ([]),
-            "raw": ([])
-        })
-    })
-    
-    for ($form, $values) in $indicator_differences {
-        switch $form {
-            "inet:fqdn": { 
-                for $value in $values {
-                    $payload.types.dom.append($value)
-                }
+        // Create indicator nodes and tag them with threat group
+        if ($key_type = "dom") {
+            ($ok, $norm) = $lib.trycast(inet:fqdn, $indicator_key)
+            if ($ok) {
+                [ inet:fqdn=$norm .seen=$added_time ] { [ +#$lib.str.concat($tagPrefix, ".", $threat_key) ] }
+                $count = ($count + 1)
             }
-            ("inet:ipv4", "inet:ipv6"): { 
-                for $value in $values {
-                    $payload.types.ip.append($value)
-                }
+        } elif ($key_type = "ip4") {
+            ($ok, $norm) = $lib.trycast(inet:ipv4, $indicator_key)
+            if ($ok) {
+                [ inet:ipv4=$norm .seen=$added_time ] { [ +#$lib.str.concat($tagPrefix, ".", $threat_key) ] }
+                $count = ($count + 1)
             }
-            ("hash:md5", "hash:sha1", "hash:sha256"): { 
-                for $value in $values {
-                    $payload.types.hash.append($value)
-                }
-            }
-        }
-    }
-    
-    return($payload)
-}
-
-function calculateSyncDifferences(synapse_indicators, validin_indicators) {
-    /*
-    Figures out what indicators need to be synced between systems
-    */
-    try {
-        $differences = ({
-            "to_add_validin": ({}),
-            "to_add_synapse": ({})
-        })
-        
-        
-        // Get all indicator types from both systems
-        $all_forms = ([])
-        if ($synapse_indicators != $lib.null and $lib.len($synapse_indicators) > 0) {
-            for ($form, $values) in $synapse_indicators {
-                $all_forms.append($form)
-            }
-        }
-        if ($validin_indicators != $lib.null and $lib.len($validin_indicators) > 0) {
-            for ($form, $values) in $validin_indicators {
-                $all_forms.append($form)
-            }
-        }
-        $all_forms = $all_forms.unique()
-        
-        // Compare each indicator type
-        for $form in $all_forms {
-            $synapse_values = ([])
-            if ($synapse_indicators != $lib.null and $synapse_indicators.$form) {
-                $synapse_values = $synapse_indicators.$form
-            }
-            
-            $validin_values = ([])
-            if ($validin_indicators != $lib.null and $validin_indicators.$form) {
-                $validin_values = $validin_indicators.$form
-            }
-            
-            // Find what's missing on each side
-            $to_validin = ([])
-            $to_synapse = ([])
-            
-            // Find indicators that exist in Synapse but not Validin
-            for $synapse_item in $synapse_values {
-                if (not $validin_values.has($synapse_item)) {
-                    $to_validin.append($synapse_item)
-                }
-            }
-            
-            // Find indicators that exist in Validin but not Synapse
-            for $validin_item in $validin_values {
-                if (not $synapse_values.has($validin_item)) {
-                    $to_synapse.append($validin_item)
-                }
-            }
-            
-            // Only track types that actually have differences
-            if ($lib.len($to_validin) > 0) {
-                $differences.to_add_validin.$form = $to_validin
-            }
-            if ($lib.len($to_synapse) > 0) {
-                $differences.to_add_synapse.$form = $to_synapse
-            }
-            
-            if ($lib.debug) {
-                $lib.print(`Form {$form}: {$lib.len($to_validin)} to add to Validin, {$lib.len($to_synapse)} to add to Synapse`)
-            }
-        }
-        
-        return($differences)
-    } catch StormRuntimeError as err {
-        $lib.warn(`Failed to calculate sync differences: {$err}`)
-        return(({
-            "to_add_validin": ({}),
-            "to_add_synapse": ({})
-        }))
-    }
-}
-
-function performProjectSync(project_node, sync_mode) {
-    /*
-    Syncs indicators between Synapse and Validin projects (additive only - never deletes)
-    
-    Modes: "pull" (Validin -> Synapse), "push" (Synapse -> Validin), "draft" (dry-run)
-    Use separate cron jobs for pull and push to get bidirectional sync
-    */
-    try {
-        $project_guid = $project_node.props.get("_validin:guid")
-        $project_name = $project_node.props.get("name")
-        if ($project_name = $lib.null) {
-            $project_name = "Unknown"
-        }
-        
-        $debugPrint("Sync", `Starting {$sync_mode} for '{$project_name}'`)
-        
-        // Get current indicators from both systems
-        $synapse_indicators = $gatherSynapseIndicators($project_node)
-        
-        $api = $lib.import(ex.validin.api, debug=$lib.debug)
-        $validin_data = $api.getProjectIndicators($project_guid)
-        
-        // Process Validin API response into same format as Synapse data
-        $validin_indicators = ({})
-        if ($validin_data and $validin_data.indicators) {
-            
-            for $indicator in $validin_data.indicators {
-                $form = $lib.null
-                $value = $indicator.key  // Use 'key' not 'value'
-                
-                // Convert Validin types to Synapse forms
-                switch $indicator.key_type {
-                    "dom": { 
-                        $form = "inet:fqdn"
-                    }
-                    "ip4": { 
-                        $form = "inet:ipv4"
-                    }
-                    "ip6": { 
-                        $form = "inet:ipv6"
-                    }
-                    "hash": { 
-                        // Try each hash type with trycast for proper validation
-                        ($ok, $norm) = $lib.trycast("hash:md5", $value)
-                        if $ok { 
-                            $form = "hash:md5" 
-                        } else {
-                            ($ok, $norm) = $lib.trycast("hash:sha1", $value) 
-                            if $ok { 
-                                $form = "hash:sha1" 
-                            } else {
-                                ($ok, $norm) = $lib.trycast("hash:sha256", $value)
-                                if $ok { 
-                                    $form = "hash:sha256" 
-                                }
-                            }
-                        }
-                    }
-                    *: {
-                        if ($lib.debug) {
-                            $lib.warn(`Unknown key_type: {$indicator.key_type} for indicator: {$value}`)
-                        }
-                    }
-                }
-                
-                if ($form and $value) {
-                    // Use Storm dict access pattern instead of .has() method
-                    if (not $validin_indicators.$form) {
-                        $validin_indicators.$form = ([])
-                    }
-                    $validin_indicators.$form.append($value)
-                    
-                }
-            }
-            
-            // Remove duplicates
-            for ($form, $values) in $validin_indicators {
-                $validin_indicators.$form = $values.unique()
-            }
-            
-            $total_indicators = 0
-            for ($form, $values) in $validin_indicators {
-                $total_indicators = ($total_indicators + $lib.len($values))
+        } elif ($key_type = "ip6") {
+            ($ok, $norm) = $lib.trycast(inet:ipv6, $indicator_key)
+            if ($ok) {
+                [ inet:ipv6=$norm .seen=$added_time ] { [ +#$lib.str.concat($tagPrefix, ".", $threat_key) ] }
+                $count = ($count + 1)
             }
         } else {
             if ($lib.debug) {
-                if ($validin_data) {
-                    $lib.print("Validin API response received but no indicators field found")
-                } else {
-                    $lib.print("No Validin API response received")
-                }
+                $lib.warn(`Failed to create node for indicator: {$indicator_key} (type: {$key_type})`)
             }
         }
-        
-        // Figure out what needs to be synced
-        $differences = $calculateSyncDifferences($synapse_indicators, $validin_indicators)
-        
-        // Execute the sync
-        $sync_results = ({
-            "synapse_added": 0,
-            "validin_added": 0,
-            "draft_only": ($sync_mode = "draft")
-        })
-        
-        switch $sync_mode {
-            "draft": {
-                // Just show what would happen without actually doing it
-                $to_add_synapse_count = 0
-                $to_add_validin_count = 0
-                
-                for ($form, $values) in $differences.to_add_synapse {
-                    $to_add_synapse_count = ($to_add_synapse_count + $lib.len($values))
-                }
-                for ($form, $values) in $differences.to_add_validin {
-                    $to_add_validin_count = ($to_add_validin_count + $lib.len($values))
-                }
-                
-                $lib.print(`Sync Status for project '{$project_name}':`)
-                $lib.print(`  Would add {$to_add_synapse_count} indicators to Synapse`)
-                $lib.print(`  Would add {$to_add_validin_count} indicators to Validin`)
-            }
-            
-            "pull": {
-                // Create Synapse nodes from Validin indicators (with project links) - batch processing
-                $parseProjectIndicators($validin_data, $project_guid)
-                
-                // Calculate how many were actually new (approximate from differences)
-                $total_new = 0
-                for ($form, $values) in $differences.to_add_synapse {
-                    $total_new = ($total_new + $lib.len($values))
-                }
-                $sync_results.synapse_added = $total_new
-                $debugPrint("Pull", `Added {$sync_results.synapse_added} indicators to Synapse`)
-            }
-            
-            "push": {
-                // Send Synapse indicators to Validin via API
-                if ($lib.len($differences.to_add_validin) > 0) {
-                    $payload = $buildValidinPayload($differences.to_add_validin)
-                    
-                    $result = $api.addProjectIndicators($project_guid, $payload)
-                    if ($result) {
-                        $total_added = 0
-                        for ($form, $values) in $differences.to_add_validin {
-                            $total_added = ($total_added + $lib.len($values))
-                        }
-                        $sync_results.validin_added = $total_added
-                    }
-                }
-                $debugPrint("Push", `Added {$sync_results.validin_added} indicators to Validin`)
-            }
-        }
-        
-        // Update last sync time
-        if ($sync_mode != "draft") {
-            $current_time = $lib.time.now()
-            yield $project_node
-            [ :_validin:last_sync=$current_time ]
-            
-            if ($lib.debug) {
-                $lib.print(`Updated last sync timestamp for project {$project_guid}`)
-            }
-        }
-        
-        return($sync_results)
-    } catch StormRuntimeError as err {
-        $lib.warn(`Failed to perform project sync: {$err}`)
-        return(({
-            "synapse_added": 0,
-            "validin_added": 0,
-            "error": $err
-        }))
     }
+
+    if ($lib.debug) {
+        $lib.print(`Processed {$count} threat group indicators for {$threat_key}`)
+    }
+
+    | uniq |
+    [<(seen)+ { yield $srcnode }]
+}
+
+function parseDomainReputation(data, domain) {
+    $srcnode = $getMetaSource()
+
+    // Normalize domain and create the node
+    ($ok, $norm) = $lib.trycast(inet:fqdn, $domain)
+    if ($ok) {
+        // Create/update the domain node with reputation properties
+        [ inet:fqdn=$norm
+            :_validin:reputation_score=$data.score
+            :_validin:reputation_verdict=$data.verdict
+        ] {
+            // Apply reputation tags based on annotations
+            for $annotation in $data.annotations {
+                if ($annotation.description = "MAGESTIC_MILLION_RANK") {
+                    [ +#rep.validin.majestic.1m ]
+                } elif ($annotation.description = "TRANCO_TOP_1M_RANK") {
+                    [ +#rep.validin.tranco.1m ]
+                } elif ($annotation.description = "UMBRELLA_TOP_1M_RANK") {
+                    [ +#rep.validin.umbrella.1m ]
+                }
+            }
+        }
+    } else {
+        if ($lib.debug) {
+            $lib.warn(`Failed to cast domain: {$domain}`)
+        }
+    }
+
+    | uniq |
+    [<(seen)+ { yield $srcnode }]
 }

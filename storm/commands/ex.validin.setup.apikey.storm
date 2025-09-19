@@ -1,3 +1,4 @@
+// Configure Validin API authentication for user or global scope
 init {
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
 

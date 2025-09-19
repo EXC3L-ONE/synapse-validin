@@ -7,3 +7,6 @@ __pycache__/
 venv/
 .vscode/
 test/__pycache__/
+test/
+pytest.ini
+env.example

@@ -1,3 +1,4 @@
+// Retrieve project indicators and create (refs) edges to proj:project nodes
 init {
     $api = $lib.import(ex.validin.api, debug=$lib.debug)
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)

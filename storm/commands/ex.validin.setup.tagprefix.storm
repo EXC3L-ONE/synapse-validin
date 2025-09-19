@@ -1,3 +1,4 @@
+// Configure the tag prefix used for Validin enrichment tags
 init {
     $privsep = $lib.import(ex.validin.privsep)
 

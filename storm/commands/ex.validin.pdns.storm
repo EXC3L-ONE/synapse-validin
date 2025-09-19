@@ -1,3 +1,4 @@
+// Retrieve passive DNS records for IPs and domains, with optional extra records
 init {
     $api = $lib.import(ex.validin.api, debug=$lib.debug)
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
@@ -25,7 +26,7 @@ if ($api_key_set != $lib.false) {
             // If the user requested extra DNS records, fetch them
             // and yield them as well.
             {            
-                if ($cmdopts.'include-extra') {
+                if ($cmdopts.include_extra) {
                     $extra_dns = $api.getExtraDomainPDNS($node.repr())
                     if ($extra_dns) {
                         divert $cmdopts.yield $privsep.parseDomainPDNS($extra_dns)

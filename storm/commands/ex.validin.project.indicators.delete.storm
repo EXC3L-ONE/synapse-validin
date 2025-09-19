@@ -1,3 +1,4 @@
+// Remove indicators from a Validin project and clean up (refs) edges
 init {
     $api = $lib.import(ex.validin.api, debug=$lib.debug)
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)

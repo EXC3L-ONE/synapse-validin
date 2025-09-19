@@ -1,3 +1,5 @@
+// Retrieve domain registration history from Validin
+// Creates inet:whois:rec nodes with temporal data
 init {
     $api = $lib.import(ex.validin.api, debug=$lib.debug)
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)

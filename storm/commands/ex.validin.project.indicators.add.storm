@@ -1,3 +1,5 @@
+// Add indicators to a Validin project by form type
+// Supports domains, IPs, and hashes with proper categorization
 init {
     $api = $lib.import(ex.validin.api, debug=$lib.debug)
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)

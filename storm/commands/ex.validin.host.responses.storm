@@ -1,3 +1,4 @@
+// Retrieve host crawl data creating HTTP requests, flows, and SSL certificates
 init {
     $api = $lib.import(ex.validin.api, debug=$lib.debug)
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
