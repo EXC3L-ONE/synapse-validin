@@ -1,5 +1,6 @@
 // Retrieve host crawl data creating HTTP requests, flows, and SSL certificates
 init {
+    if $cmdopts.debug { $lib.debug = $lib.true }
     $api = $lib.import(ex.validin.api, debug=$lib.debug)
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
 }
@@ -22,7 +23,7 @@ if ($api_key_set != $lib.false) {
             }
 
         }
-        *: { if $lib.debug { $lib.warn("unsupported form received: {f}", f=$node.form()) } }
+        *: { $privsep.debugPrint("Host Responses", `unsupported form received: {$node.form()}`) }
     }
 
 } else {

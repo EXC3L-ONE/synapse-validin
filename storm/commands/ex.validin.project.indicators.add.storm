@@ -1,6 +1,7 @@
 // Add indicators to a Validin project by form type
 // Supports domains, IPs, and hashes with proper categorization
 init {
+    if $cmdopts.debug { $lib.debug = $lib.true }
     $api = $lib.import(ex.validin.api, debug=$lib.debug)
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
 }
@@ -9,7 +10,13 @@ $api_key_set = $privsep.getValidinAPIKey()
 
 if ($api_key_set != $lib.false) {
 
-    $project_guid = $cmdopts.project_guid
+    // Resolve project identifier (name or GUID) to get both project GUID and Validin GUID
+    ($success, $project_guid, $validin_guid) = $privsep.resolveProjectIdentifier($cmdopts.project_identifier)
+
+    if (not $success) {
+        $lib.warn(`Project not found: {$cmdopts.project_identifier}. Run 'ex.validin.project.list' to sync projects first.`)
+        return()
+    }
 
     // Initialize payload structure
     $payload = ({
@@ -20,9 +27,9 @@ if ($api_key_set != $lib.false) {
             "raw": ([])
         })
     })
-    
+
     $indicator_value = $node.repr()
-    
+
     switch $node.form() {
         "inet:fqdn": {
             $payload.types.dom.append($indicator_value)
@@ -33,15 +40,15 @@ if ($api_key_set != $lib.false) {
         ("hash:md5", "hash:sha1", "hash:sha256"): {
             $payload.types.hash.append($indicator_value)
         }
-        *: { 
-            $lib.warn("Unsupported form for indicator addition: {f}", f=$node.form()) 
+        *: {
+            $lib.warn("Unsupported form for indicator addition: {f}", f=$node.form())
             return()
         }
     }
-    
+
     $privsep.debugPrint("Add", `Starting add {$node.form()}={$indicator_value}`)
-    
-    $result = $api.addProjectIndicators($project_guid, $payload)
+
+    $result = $api.addProjectIndicators($validin_guid, $payload)
     if ($result) {
         [ <(refs)+ { proj:project=$project_guid } ]
         $privsep.debugPrint("Add", `Successfully added {$node.form()}={$indicator_value}`)

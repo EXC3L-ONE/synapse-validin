@@ -1,5 +1,6 @@
 // Configure the Validin API hostname
 init {
+    if $cmdopts.debug { $lib.debug = $lib.true }
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
 
     $lib.print("Setting Validin API hostname for all users.")

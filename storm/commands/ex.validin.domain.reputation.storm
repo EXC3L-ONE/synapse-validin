@@ -1,5 +1,6 @@
 // Retrieve domain reputation scores and apply popularity/risk tags
 init {
+    if $cmdopts.debug { $lib.debug = $lib.true }
     $api = $lib.import(ex.validin.api, debug=$lib.debug)
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
 }

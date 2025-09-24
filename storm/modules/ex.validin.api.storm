@@ -1,12 +1,12 @@
 /*
     Validin API abstraction layer.
-    
+
     Provides clean function interfaces for Validin API endpoints while
     delegating HTTP execution and authentication to the privileged layer.
     URL encoding and parameter formatting handled here.
 */
 
-$privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
+$privsep = $lib.import(ex.validin.privsep)
 
 function getProjectList() {
     $api_url = "project/list"

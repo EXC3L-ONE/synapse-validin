@@ -10,3 +10,4 @@ test/__pycache__/
 test/
 pytest.ini
 env.example
+docs/

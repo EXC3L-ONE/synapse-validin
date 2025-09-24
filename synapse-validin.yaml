@@ -142,7 +142,7 @@ commands:
           help: Show verbose debug output.
           
   - name: ex.validin.whois
-    descr: Fetches WHOIS registration history for given `inet:fqdn` nodes.
+    descr: Fetches WHOIS registration history for given `inet:fqdn` nodes (automatically pivots to apex domain).
     perms:
       - [ex, validin, user]
     cmdargs:
@@ -205,9 +205,9 @@ commands:
     perms:
       - [ex, validin, user]
     cmdargs:
-      - - project_guid
+      - - project_identifier
         - type: str
-          help: The Validin project GUID to add indicators to
+          help: The Validin project name or GUID to add indicators to
       - - --debug
         - type: bool
           default: false
@@ -227,9 +227,9 @@ commands:
     perms:
       - [ex, validin, user]
     cmdargs:
-      - - project_guid
+      - - project_identifier
         - type: str
-          help: The Validin project GUID to remove indicators from
+          help: The Validin project name or GUID to remove indicators from
       - - --debug
         - type: bool
           default: false
@@ -243,6 +243,24 @@ commands:
         - hash:md5
         - hash:sha1
         - hash:sha256
+
+  - name: ex.validin.project.set
+    descr: Sets the active Validin project for indicator management operations
+    perms:
+      - [ex, validin, user]
+    cmdargs:
+      - - project_identifier
+        - type: str
+          help: The Validin project name or GUID to set as active
+      - - --self
+        - type: bool
+          default: false
+          action: store_true
+          help: Set the project as a user variable. If not used, the project is set globally.
+    forms:
+      inputs:
+        - proj:project
+
 
   - name: ex.validin.threat.group.indicators
     descr: Retrieves reported indicators for a named threat group
@@ -306,9 +324,25 @@ optic:
         forms: [ inet:fqdn ]
       - name: whois
         storm: ex.validin.whois
-        descr: Get domain registration information from Validin
+        descr: Get domain registration information from Validin (pivots to apex domain)
         forms: [ inet:fqdn ]
       - name: domain reputation
         storm: ex.validin.domain.reputation $node.repr()
         descr: Get domain reputation scores and risk tags from Validin
         forms: [ inet:fqdn ]
+      - name: add to active project
+        storm: 'ex.validin.project.indicators.add $lib.user.vars.get("validin:active_project")'
+        descr: Add this indicator to the active Validin project (use ex.validin.project.set to set active project)
+        forms: [ inet:fqdn, inet:ipv4, inet:ipv6, hash:md5, hash:sha1, hash:sha256 ]
+      - name: remove from active project
+        storm: 'ex.validin.project.indicators.delete $lib.user.vars.get("validin:active_project")'
+        descr: Remove this indicator from the active Validin project
+        forms: [ inet:fqdn, inet:ipv4, inet:ipv6, hash:md5, hash:sha1, hash:sha256 ]
+      - name: set as active project
+        storm: ex.validin.project.set :name --self
+        descr: Set this project as your active Validin project for indicator operations
+        forms: [ proj:project ]
+      - name: get project indicators
+        storm: ex.validin.project.indicators.get --yield
+        descr: Sync indicators from this Validin project to Synapse
+        forms: [ proj:project ]

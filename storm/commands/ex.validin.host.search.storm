@@ -1,6 +1,7 @@
 // Execute advanced search queries against Validin's crawl database
 // Creates it:exec:query nodes and yields matching host data
 init {
+    if $cmdopts.debug { $lib.debug = $lib.true }
     $api = $lib.import(ex.validin.api, debug=$lib.debug)
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
 }

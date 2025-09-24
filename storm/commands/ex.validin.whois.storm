@@ -1,6 +1,7 @@
 // Retrieve domain registration history from Validin
 // Creates inet:whois:rec nodes with temporal data
 init {
+    if $cmdopts.debug { $lib.debug = $lib.true }
     $api = $lib.import(ex.validin.api, debug=$lib.debug)
     $privsep = $lib.import(ex.validin.privsep, debug=$lib.debug)
 }
@@ -8,15 +9,17 @@ init {
 $api_key_set = $privsep.getValidinAPIKey()
 
 if ($api_key_set != $lib.false) {
-    if ($lib.debug) {
-        $lib.print("Getting registration history for {d}", d=$node.repr())
-    }
+    // Pivot to zone (apex domain) for WHOIS lookup
+    :zone -> inet:fqdn {
+        $zone_domain = $node.repr()
+        $privsep.debugPrint("WHOIS", `Getting registration history for zone: {$zone_domain}`)
 
-    $data = $api.getDomainRegHistory($node.repr())
-    
-    if ($data) {
-        divert $cmdopts.yield $privsep.emitDomainRegHistory($data)
-    } 
+        $data = $api.getDomainRegHistory($zone_domain)
+
+        if ($data) {
+            divert $cmdopts.yield $privsep.emitDomainRegHistory($data)
+        }
+    }
 } else {
     $lib.exit("Validin API key not set and is needed to use this function, please run 'ex.validin.setup.apikey' first")
 }

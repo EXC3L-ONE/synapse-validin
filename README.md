@@ -11,7 +11,7 @@ This Synapse Rapid Power-up provides comprehensive [Validin](https://validin.com
 
 ### Enrichment Commands
 - `ex.validin.pdns` - Retrieve passive DNS records for IPs and domains
-- `ex.validin.whois` - Get domain registration history
+- `ex.validin.whois` - Get domain registration history (automatically pivots to apex domain)
 - `ex.validin.host.subdomains` - Discover subdomains for domains
 - `ex.validin.host.responses` - Get HTTP crawl history for hosts
 - `ex.validin.host.search` - Execute advanced search queries
@@ -19,6 +19,7 @@ This Synapse Rapid Power-up provides comprehensive [Validin](https://validin.com
 
 ### Project Management
 - `ex.validin.project.list` - List accessible Validin projects
+- `ex.validin.project.set` - Set active project for indicator operations
 - `ex.validin.project.indicators.get` - Retrieve project indicators
 - `ex.validin.project.indicators.add` - Add indicators to projects
 - `ex.validin.project.indicators.delete` - Remove indicators from projects

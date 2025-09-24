@@ -1,9 +1,13 @@
 /*
     Validin privilege separation layer.
-    
+
     Handles authentication, HTTP execution, and response parsing.
     Creates Synapse nodes with proper relationships and meta source tagging.
 */
+
+// =============================================================================
+// CORE UTILITIES - Meta source, debugging, configuration
+// =============================================================================
 
 function getMetaSource() {
     [ meta:source=$lib.guid("validin", "ex", "powerup") :name="validin" ]
@@ -11,65 +15,9 @@ function getMetaSource() {
 }
 
 function debugPrint(operation_type, details) {
-    /*
-    Simple debug helper for consistent logging format
-    */
     if $lib.debug {
         $lib.print(`{$operation_type}: {$details}`)
     }
-}
-
-
-function getValidinAPIKey() {
-    // see if the user has their own key set
-    $apikey = $lib.user.vars.get("validin:apikey")
-    if ($apikey) {
-        return($apikey)
-    }
-
-    // no user key, check for global
-    $apikey = $lib.globals.get("validin:apikey")
-    if ($apikey) {
-        return($apikey)
-    }
- 
-    return($lib.false)
-}
-
-function getValidinActiveProject() {
-    // see if the user has their own active project set
-    $project_guid = $lib.user.vars.get("validin:active_project")
-    if ($project_guid) {
-        return($project_guid)
-    }
-
-    // no user project, check for global
-    $project_guid = $lib.globals.get("validin:active_project")
-    if ($project_guid) {
-        return($project_guid)
-    }
- 
-    return($lib.false)
-}
-
-function setValidinActiveProject(guid, self) {
-    // Validate the project GUID exists in our system first
-    $project_exists = $lib.false
-    proj:project=$guid {
-        $project_exists = $lib.true
-    }
-    
-    if (not $project_exists) {
-        $lib.warn(`Project GUID {$guid} not found in Synapse. Run 'ex.validin.project.list' first to sync projects.`)
-        return($lib.false)
-    }
-    
-    if ($self) {
-        $lib.user.vars.set("validin:active_project", $guid)
-    } else {
-        $lib.globals.set("validin:active_project", $guid)
-    }
-    return($lib.true)
 }
 
 function setValidinExtendedProps() {
@@ -133,6 +81,26 @@ function setValidinExtendedProps() {
     }
 }
 
+// =============================================================================
+// AUTHENTICATION & CONFIGURATION - API keys, hostnames, settings
+// =============================================================================
+
+function getValidinAPIKey() {
+    // see if the user has their own key set
+    $apikey = $lib.user.vars.get("validin:apikey")
+    if ($apikey) {
+        return($apikey)
+    }
+
+    // no user key, check for global
+    $apikey = $lib.globals.get("validin:apikey")
+    if ($apikey) {
+        return($apikey)
+    }
+
+    return($lib.false)
+}
+
 function setValidinAPIKey(key, self) {
     if ($self) {
         $lib.user.vars.set("validin:apikey", `Bearer {$key}`)
@@ -144,7 +112,7 @@ function setValidinAPIKey(key, self) {
 
 function checkValidinAPIKey() {
     $resp = $makeValidinAPIRequest("ping")
-        
+
     if ($resp.status = "OK") {
         return($lib.true)
     } else {
@@ -152,8 +120,20 @@ function checkValidinAPIKey() {
     }
 }
 
+function setValidinAPIHostname(hostname) {
+    ($ok, $hostname_normalised) = $lib.trycast(inet:fqdn, $hostname)
+    if ($ok) {
+        $lib.globals.set("validin:api-hostname", $hostname)
+        return($lib.true)
+    } else {
+        $lib.warn(`Failed to set Validin API hostname, couldn't normalise value to a domain: {$hostname}`)
+        return($lib.false)
+    }
+
+}
+
 function getTagPrefix() {
-    return($lib.globals.get("ex.validin:tag-prefix", default=rep.validin))
+    return($lib.globals.get("ex.validin:tag-prefix", default="rep.validin"))
 }
 
 function setTagPrefix(prefix) {
@@ -166,27 +146,17 @@ function setTagPrefix(prefix) {
     $lib.globals.set("ex.validin:tag-prefix", $prefix)
 }
 
-function setValidinAPIHostname(hostname) {
-    ($ok, $hostname_normalised) = $lib.trycast(inet:fqdn, $hostname)
-    if ($ok) {
-        $lib.globals.set("validin:api-hostname", $hostname)
-        return($lib.true)
-    } else {
-        $lib.warn(`Failed to set Validin API hostname, couldn't normalise value to a domain: {$hostname}`)
-        return($lib.false)
-    }
-    
-}
+// =============================================================================
+// HTTP EXECUTION - Authentication, requests, error handling
+// =============================================================================
 
 function makeValidinAPIRequest(api_endpoint, method="GET", post_data=$lib.null) {
     $api_hostname = $lib.globals.get("validin:api-hostname", default="api.validin.com")
     $url = `https://{$api_hostname}/api/{$api_endpoint}`
 
-    if $lib.debug {
-        $lib.print(`Calling API URL: {$url} with method {$method}`)
-        if ($post_data) {
-            $lib.print(`POST data: {$post_data}`)
-        }
+    $debugPrint("HTTP", `Calling API URL: {$url} with method {$method}`)
+    if ($post_data) {
+        $debugPrint("HTTP", `POST data: {$post_data}`)
     }
 
     // Handle GET vs POST requests
@@ -196,142 +166,35 @@ function makeValidinAPIRequest(api_endpoint, method="GET", post_data=$lib.null) 
         $resp = $lib.inet.http.get($url, headers=({"Authorization": $getValidinAPIKey()}))
     }
 
-    if ($resp.code != 200) { 
+    if ($resp.code != 200) {
         $lib.warn(`Validin API {$method} request failed with code {$resp.code}`)
-        if $lib.debug {
-            $lib.print(`Response body: {$resp.body}`)
-        }
-        return($lib.null) 
+        $debugPrint("HTTP", `Response body: {$resp.body}`)
+        return($lib.null)
     }
 
     $json = $resp.body.json()
-    
-    if $lib.debug {
-        $lib.print(`API Response Code: {$resp.code}`)
-        if ($json) {
-            $lib.print("Processing API response data")
-            if ($json.indicators) {
-                $lib.print(`Indicators found: {$lib.len($json.indicators)}`)
-                if ($lib.len($json.indicators) > 0) {
-                    $lib.print(`First indicator: {$json.indicators.0}`)
-                }
-            } else {
-                $lib.print("No 'indicators' key in response")
+
+    $debugPrint("HTTP", `API Response Code: {$resp.code}`)
+    if ($json) {
+        $debugPrint("HTTP", "Processing API response data")
+        if ($json.indicators) {
+            $debugPrint("HTTP", `Indicators found: {$lib.len($json.indicators)}`)
+            if ($lib.len($json.indicators) > 0) {
+                $debugPrint("HTTP", `First indicator: {$json.indicators.0}`)
             }
         } else {
-            $lib.print("API response is null/empty")
+            $debugPrint("HTTP", "No 'indicators' key in response")
         }
+    } else {
+        $debugPrint("HTTP", "API response is null/empty")
     }
 
     return($json)
 }
 
-function parseDomains(data) {
-
-    $srcnode = $getMetaSource()
-
-    for $domain in $data.domains {
-        [inet:fqdn=$domain.fqdn]
-    }
-    | uniq |
-    [<(seen)+ { yield $srcnode }]
-
-}
-
-function parseCrawlResponse(data, create_query=$lib.false, query="") {
-
-    $srcnode = $getMetaSource()
-    $query_time = $lib.time.now()
-    $query_created = $lib.false
-
-    for $crawl in $data.records.crawlr {
-        if (not $crawl.value.error) {
-
-            // Parse HTTP headers from banner_full, filtering invalid entries
-            // Only process banners containing ": " to avoid malformed headers
-            $banners = ([])
-            for $banner in $crawl.value.banner_full { 
-                if ($banner ~= ": ") { 
-                    $banners.append($banner.split(": ")) 
-                }
-            }
-
-            // Simplified URL construction - prioritize location, then build from components
-            if ($crawl.value.location) { 
-                $url = $crawl.value.location 
-            } else {
-                $host = ($crawl.value.host or $crawl.value.ip)
-                $port = $crawl.value.port
-                // Only append port if non-standard
-                if ($port and $port != 80 and $port != 443) {
-                    $url = `{$crawl.value.scheme}://{$host}:{$port}`
-                } else {
-                    $url = `{$crawl.value.scheme}://{$host}`
-                }
-            }
-
-            // Create hierarchical graph: request -> flow -> ssl cert  
-            // Preserves temporal relationships and server associations
-            [(inet:http:request=("validin", $crawl.key, $crawl.first_seen, $crawl.last_seen)
-                :url*unset=$url
-                :time*unset=$lib.time.fromunix($crawl.first_seen)
-                :server*unset=`tcp://{$crawl.value.ip}:{$crawl.value.port}`
-                :response:headers*unset=$banners
-                // Extract HTTP status from start_line format: "HTTP/1.1 200 OK"
-                :response:code*unset?=$lib.regex.search(" (\d{3}) ", $crawl.value.start_line).0
-                // Validin-specific enrichment properties
-                :_validin:body_hash*unset?=$crawl.value.body_hash
-                :_validin:favicon_hash*unset?=$crawl.value.favicon_hash
-                :_validin:class_0_hash*unset?=$crawl.value.class_0_hash
-                :_validin:class_1_hash*unset?=$crawl.value.class_1_hash
-                :_validin:banner_0_hash*unset?=$crawl.value.banner_0_hash
-                :flow={[inet:flow=("validin", $crawl.key, $crawl.first_seen, $crawl.last_seen, $crawl.value.port, $crawl.value.scheme)
-                    :dst*unset=`tcp://{$crawl.value.ip}:{$crawl.value.port}`
-                    :dst:handshake*unset=$crawl.value.banner
-                    :dst:txbytes*unset=$crawl.value.length
-                    :time*unset=$lib.time.fromunix($crawl.first_seen)
-                    :dst:ssl:cert?={[crypto:x509:cert=$lib.gen.cryptoX509CertBySha256($crawl.value.cert_fingerprint_sha256) 
-                                        :validity:notafter*unset=$crawl.value.cert.not_after
-                                        :validity:notbefore*unset=$crawl.value.cert.not_before
-                                        :issuer*unset=$crawl.value.cert.issuer.replace("/", " ")
-                    ]}
-                ]}
-            )]
-
-            for $anchor in $crawl.value.ext_links.anchors {
-                [+(_validin:anchor)> {[inet:fqdn=$anchor]}]
-            }
-        }
-
-        // Create JARM fingerprint samples when available
-        if ($crawl.value.cert_details.jarm) {
-            { [(inet:ssl:jarmsample=(`tcp://{$crawl.value.ip}:{$crawl.value.port}`, $crawl.value.cert_details.jarm) .seen=($crawl.first_seen, $crawl.last_seen) )] }
-        }
-
-    }
-    | uniq |
-    [<(seen)+ { yield $srcnode }]
-
-    if ($create_query) { 
-        if (not $query_created) {
-            $query_node = $createQueryNode($query)
-            $query_created = $lib.true
-        }
-
-        [ <(found)+ { yield $query_node } ]
-    }
-}
-
-function createQueryNode(query) {
-    [it:exec:query=("validin", $lib.time.now(), $query)
-                            :text=$query
-                            :time=$lib.time.now()
-                            :language=validin
-                            :synuser=$lib.user.iden
-                            :api:url=`https://{$lib.globals.get("validin:api-hostname", default="api.validin.com")}/api/axon/advanced/query`
-    ]
-    return($node)
-}
+// =============================================================================
+// PASSIVE DNS ENRICHMENT - Historical DNS resolution data
+// =============================================================================
 
 function parseDomainPDNS(data) {
 
@@ -410,35 +273,131 @@ function parseIpPDNS(data) {
 
 }
 
+// =============================================================================
+// HOST ANALYSIS - Subdomains, HTTP responses, crawl data, JARM fingerprints
+// =============================================================================
+
+function parseDomains(data) {
+
+    $srcnode = $getMetaSource()
+
+    for $domain in $data.domains {
+        [inet:fqdn=$domain.fqdn]
+    }
+    | uniq |
+    [<(seen)+ { yield $srcnode }]
+
+}
+
+function parseCrawlResponse(data, create_query=$lib.false, query="") {
+
+    $srcnode = $getMetaSource()
+    $query_time = $lib.time.now()
+    $query_created = $lib.false
+
+    for $crawl in $data.records.crawlr {
+        if (not $crawl.value.error) {
+
+            $banners = ([])
+            for $banner in $crawl.value.banner_full { if ($banner ~=": ") { $banners.append($banner.split(": ")) }}
+
+            if ($crawl.value.location) { $url = $crawl.value.location }
+            elif ($crawl.value.host and $crawl.value.port and $crawl.value.port != 80 and $crawl.value.port != 443) { $url = `{$crawl.value.scheme}://{$crawl.value.host}:{$crawl.value.port}` } 
+            elif ($crawl.value.host) { $url = `{$crawl.value.scheme}://{$crawl.value.host}` }
+            elif ($crawl.value.ip and $crawl.value.port and $crawl.value.port != 80 and $crawl.value.port != 443 ) { $url = `{$crawl.value.scheme}://{$crawl.value.ip}:{$crawl.value.port}` }
+            else { $url = `{$crawl.value.scheme}://{$crawl.value.ip}` }
+
+            [(inet:http:request=("validin", $crawl.key, $crawl.first_seen, $crawl.last_seen)
+                :url*unset=$url
+                :time*unset=$lib.time.fromunix($crawl.first_seen)
+                :server*unset=`tcp://{$crawl.value.ip}:{$crawl.value.port}`
+                :response:headers*unset=$banners
+                :response:code*unset?=$lib.regex.search(" (\d{3}) ", $crawl.value.start_line).0
+                :_validin:body_hash*unset?=$crawl.value.body_hash
+                :_validin:favicon_hash*unset?=$crawl.value.favicon_hash
+                :_validin:class_0_hash*unset?=$crawl.value.class_0_hash
+                :_validin:class_1_hash*unset?=$crawl.value.class_1_hash
+                :_validin:banner_0_hash*unset?=$crawl.value.banner_0_hash
+                :flow={[inet:flow=("validin", $crawl.key, $crawl.first_seen, $crawl.last_seen, $crawl.value.port, $crawl.value.scheme)
+                    :dst*unset=`tcp://{$crawl.value.ip}:{$crawl.value.port}`
+                    :dst:handshake*unset=$crawl.value.banner
+                    :dst:txbytes*unset=$crawl.value.length
+                    :time*unset=$lib.time.fromunix($crawl.first_seen)
+                    :dst:ssl:cert?={[crypto:x509:cert=$lib.gen.cryptoX509CertBySha256($crawl.value.cert_fingerprint_sha256) 
+                                        :validity:notafter*unset=$crawl.value.cert.not_after
+                                        :validity:notbefore*unset=$crawl.value.cert.not_before
+                                        :issuer*unset=$crawl.value.cert.issuer.replace("/", " ")
+                    ]}
+                ]}
+            )]
+
+            for $anchor in $crawl.value.ext_links.anchors {
+                [+(_validin:anchor)> {[inet:fqdn=$anchor]}]
+            }
+        }
+
+        if ($crawl.value.cert_details.jarm) {
+            { [(inet:ssl:jarmsample=(`tcp://{$crawl.value.ip}:{$crawl.value.port}`, $crawl.value.cert_details.jarm) .seen=($crawl.first_seen, $crawl.last_seen) )] }
+        }
+
+    }
+    | uniq |
+    [<(seen)+ { yield $srcnode }]
+
+    if ($create_query) { 
+        if (not $query_created) {
+            $query_node = $createQueryNode($query)
+            $query_created = $lib.true
+        }
+
+        [ <(found)+ { yield $query_node } ]
+    }
+}
+
+function createQueryNode(query) {
+    [it:exec:query=("validin", $lib.time.now(), $query)
+                            :text=$query
+                            :time=$lib.time.now()
+                            :language=validin
+                            :synuser=$lib.user.iden
+                            :api:url=`https://{$lib.globals.get("validin:api-hostname", default="api.validin.com")}/api/axon/advanced/query`
+    ]
+    return($node)
+}
+
+// =============================================================================
+// DOMAIN INTELLIGENCE - WHOIS history, reputation scores, risk tags
+// =============================================================================
+
 function selectBestTimestamp(reg) {
     // Select the best timestamp for WHOIS record deduplication
     // Priority order: changed > updated > expires > registered > date
-    
+
     // Check for changed date first (most recent change indicator)
     if ($reg.changed and $reg.changed.0) {
         return($lib.time.parse($reg.changed.0, "%Y-%m-%dT%H:%M:%SZ"))
     }
-    
+
     // Fall back to updated date (modification timestamp)
     if ($reg.updated and $reg.updated.0) {
         return($lib.time.parse($reg.updated.0, "%Y-%m-%dT%H:%M:%SZ"))
     }
-    
+
     // Fall back to expires date (next best indicator of record state)
     if ($reg.expires and $reg.expires.0) {
         return($lib.time.parse($reg.expires.0, "%Y-%m-%dT%H:%M:%SZ"))
     }
-    
+
     // Fall back to registered/created date (original creation)
     if ($reg.registered and $reg.registered.0) {
         return($lib.time.parse($reg.registered.0, "%Y-%m-%dT%H:%M:%SZ"))
     }
-    
+
     // Final fallback to date field (current behavior)
     if ($reg.date) {
         return($lib.time.parse($reg.date, "%Y-%m-%d"))
     }
-    
+
     // Should not reach here, but return current time as last resort
     return($lib.time.now())
 }
@@ -461,7 +420,7 @@ function emitDomainRegHistory(data) {
         // conditional on if updated field exists
         if $reg.updated {
             $updated = $lib.time.parse($reg.updated.0, "%Y-%m-%dT%H:%M:%SZ")
-            [ :updated = $updated ] 
+            [ :updated = $updated ]
         }
         // Add nameserver relationships
         for $ns in $reg.nameservers {
@@ -470,6 +429,78 @@ function emitDomainRegHistory(data) {
     }
     [<(seen)+ { yield $srcnode }]
     | uniq
+}
+
+function parseDomainReputation(data, domain) {
+    $srcnode = $getMetaSource()
+
+    // Normalize domain and create the node
+    ($ok, $norm) = $lib.trycast(inet:fqdn, $domain)
+    if ($ok) {
+        // Create/update the domain node with reputation properties
+        [ inet:fqdn=$norm
+            :_validin:reputation_score=$data.score
+            :_validin:reputation_verdict=$data.verdict
+        ] {
+            // Apply reputation tags based on annotations
+            for $annotation in $data.annotations {
+                if ($annotation.description = "MAGESTIC_MILLION_RANK") {
+                    [ +#rep.validin.majestic.1m ]
+                } elif ($annotation.description = "TRANCO_TOP_1M_RANK") {
+                    [ +#rep.validin.tranco.1m ]
+                } elif ($annotation.description = "UMBRELLA_TOP_1M_RANK") {
+                    [ +#rep.validin.umbrella.1m ]
+                }
+            }
+        }
+    } else {
+        if ($lib.debug) {
+            $lib.warn(`Failed to cast domain: {$domain}`)
+        }
+    }
+
+    | uniq |
+    [<(seen)+ { yield $srcnode }]
+}
+
+// =============================================================================
+// PROJECT MANAGEMENT - Project listing, indicator management, resolution
+// =============================================================================
+
+function getValidinActiveProject() {
+    // see if the user has their own active project set
+    $project_guid = $lib.user.vars.get("validin:active_project")
+    if ($project_guid) {
+        return($project_guid)
+    }
+
+    // no user project, check for global
+    $project_guid = $lib.globals.get("validin:active_project")
+    if ($project_guid) {
+        return($project_guid)
+    }
+
+    return($lib.false)
+}
+
+function setValidinActiveProject(guid, self) {
+    // Validate the project GUID exists in our system first
+    $project_exists = $lib.false
+    proj:project=$guid {
+        $project_exists = $lib.true
+    }
+
+    if (not $project_exists) {
+        $lib.warn(`Project GUID {$guid} not found in Synapse. Run 'ex.validin.project.list' first to sync projects.`)
+        return($lib.false)
+    }
+
+    if ($self) {
+        $lib.user.vars.set("validin:active_project", $guid)
+    } else {
+        $lib.globals.set("validin:active_project", $guid)
+    }
+    return($lib.true)
 }
 
 function parseProjectList(data) {
@@ -491,12 +522,12 @@ function parseProjectList(data) {
 
 function parseProjectIndicators(data, project_guid) {
     $srcnode = $getMetaSource()
-    
+
     for $indicator in $data.indicators {
         $indicator_key = $indicator.key
         $key_type = $indicator.key_type
         $added_time = $lib.time.fromunix($indicator.time)
-        
+
         // Create indicator nodes and link to project via (refs) edges
         // Validates form compatibility before node creation
         if ($key_type = "dom") {
@@ -531,15 +562,45 @@ function parseProjectIndicators(data, project_guid) {
                 }
             }
         } else {
-            if ($lib.debug) {
-                $lib.warn(`Failed to create node for indicator: {$indicator_key} (type: {$key_type})`)
-            }
+            $debugPrint("Threat", `Failed to create node for indicator: {$indicator_key} (type: {$key_type})`)
         }
     }
 
     | uniq |
     [<(seen)+ { yield $srcnode }]
 }
+
+function resolveProjectIdentifier(identifier) {
+    /*
+    Resolve project identifier (name or GUID) to project node and Validin GUID
+    Returns: (success, project_guid, validin_guid)
+    */
+
+    // Try as project name first
+    proj:project +:name=$identifier {
+        $project_guid = $node.repr()
+        $validin_guid = $node.props.get("_validin:guid")
+        if ($validin_guid) {
+            return(($lib.true, $project_guid, $validin_guid))
+        }
+    }
+
+    // Try as project GUID
+    proj:project=$identifier {
+        $project_guid = $node.repr()
+        $validin_guid = $node.props.get("_validin:guid")
+        if ($validin_guid) {
+            return(($lib.true, $project_guid, $validin_guid))
+        }
+    }
+
+    // No project found
+    return(($lib.false, $lib.null, $lib.null))
+}
+
+// =============================================================================
+// THREAT INTELLIGENCE - Campaign indicators, threat group IOCs
+// =============================================================================
 
 function parseThreatGroupIndicators(data, threat_key, limit=0) {
     $srcnode = $getMetaSource()
@@ -549,9 +610,7 @@ function parseThreatGroupIndicators(data, threat_key, limit=0) {
     for $indicator in $data.indicators {
         // Check limit if specified
         if ($limit and $count >= $limit) {
-            if ($lib.debug) {
-                $lib.print(`Reached limit of {$limit} indicators, stopping processing`)
-            }
+            $debugPrint("Threat", `Reached limit of {$limit} indicators, stopping processing`)
             break
         }
 
@@ -579,47 +638,11 @@ function parseThreatGroupIndicators(data, threat_key, limit=0) {
                 $count = ($count + 1)
             }
         } else {
-            if ($lib.debug) {
-                $lib.warn(`Failed to create node for indicator: {$indicator_key} (type: {$key_type})`)
-            }
+            $debugPrint("Threat", `Failed to create node for indicator: {$indicator_key} (type: {$key_type})`)
         }
     }
 
-    if ($lib.debug) {
-        $lib.print(`Processed {$count} threat group indicators for {$threat_key}`)
-    }
-
-    | uniq |
-    [<(seen)+ { yield $srcnode }]
-}
-
-function parseDomainReputation(data, domain) {
-    $srcnode = $getMetaSource()
-
-    // Normalize domain and create the node
-    ($ok, $norm) = $lib.trycast(inet:fqdn, $domain)
-    if ($ok) {
-        // Create/update the domain node with reputation properties
-        [ inet:fqdn=$norm
-            :_validin:reputation_score=$data.score
-            :_validin:reputation_verdict=$data.verdict
-        ] {
-            // Apply reputation tags based on annotations
-            for $annotation in $data.annotations {
-                if ($annotation.description = "MAGESTIC_MILLION_RANK") {
-                    [ +#rep.validin.majestic.1m ]
-                } elif ($annotation.description = "TRANCO_TOP_1M_RANK") {
-                    [ +#rep.validin.tranco.1m ]
-                } elif ($annotation.description = "UMBRELLA_TOP_1M_RANK") {
-                    [ +#rep.validin.umbrella.1m ]
-                }
-            }
-        }
-    } else {
-        if ($lib.debug) {
-            $lib.warn(`Failed to cast domain: {$domain}`)
-        }
-    }
+    $debugPrint("Threat", `Processed {$count} threat group indicators for {$threat_key}`)
 
     | uniq |
     [<(seen)+ { yield $srcnode }]
