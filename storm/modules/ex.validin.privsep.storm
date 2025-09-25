@@ -417,14 +417,59 @@ function emitDomainRegHistory(data) {
             :expires=$expires
             :registrar=$registrar
         ]
-        // conditional on if updated field exists
         if $reg.updated {
             $updated = $lib.time.parse($reg.updated.0, "%Y-%m-%dT%H:%M:%SZ")
             [ :updated = $updated ]
         }
-        // Add nameserver relationships
-        for $ns in $reg.nameservers {
-            [ inet:whois:recns=($ns, $node) ]
+
+        // Process contact roles from Validin API response
+        {
+            for ($role_type, $role_data) in $reg.roles {
+                $contact_type = $role_type.lower()
+
+                // Create detailed contact nodes
+                if $role_data.name {
+                    for $contact_name in $role_data.name {
+                        // Validate email before setting on contact
+                        $contact_email = $lib.null
+                        if $role_data.email.0 {
+                            ($email_ok, $email_norm) = $lib.trycast(inet:email, $role_data.email.0)
+                            if ($email_ok) {
+                                $contact_email = $email_norm
+                            }
+                        }
+
+                        [ inet:whois:contact=($domain, $contact_type, $contact_name)
+                            :address?=$role_data.street.0
+                            :city?=$role_data.city.0
+                            :country?=$role_data.country.0
+                            :state?=$role_data.state.0
+                            :email?=$contact_email
+                            :phone?=$role_data.phone.0
+                        ]
+                        [<(seen)+ { yield $srcnode }]
+                    }
+                }
+
+                // Create email nodes for whois emails
+                if $role_data.email {
+                    for $email in $role_data.email {
+                        ($ok, $norm) = $lib.trycast(inet:email, $email)
+                        if ($ok) {
+                            [ inet:whois:email=($domain, $norm) ]
+                            [<(seen)+ { yield $srcnode }]
+                        } elif $lib.debug {
+                            $debugPrint("WHOIS", `Skipping invalid email format: {$email}`)
+                        }
+                    }
+                }
+            }
+        }
+
+        {
+            for $ns in $reg.nameservers {
+                [ inet:whois:recns=($ns, $node) ] [<(seen)+ { yield $srcnode }]
+            }
         }
     }
     [<(seen)+ { yield $srcnode }]
